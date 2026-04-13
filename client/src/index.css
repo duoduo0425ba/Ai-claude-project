@@ -1011,6 +1011,337 @@ body::before {
   flex-wrap: wrap;
 }
 
+/* ========== Settings Page ========== */
+.settings-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 0 20px 40px;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.setting-item {
+  background: var(--bg-card);
+  backdrop-filter: blur(20px);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: var(--shadow-soft);
+}
+
+.setting-item label {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.setting-item input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid var(--lavender-light);
+  border-radius: var(--radius-md);
+  font-family: var(--font-main);
+  font-size: 1rem;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.setting-item input:focus {
+  border-color: var(--sakura-pink);
+  box-shadow: 0 0 0 3px rgba(255, 183, 197, 0.2);
+  outline: none;
+}
+
+.setting-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.btn-secondary {
+  padding: 12px 24px;
+  border: 2px solid var(--lavender-light);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-md);
+  font-family: var(--font-main);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-secondary:hover {
+  background: var(--lavender-light);
+  color: var(--lavender-dark);
+  transform: scale(1.05);
+}
+
+.no-changes-tip {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+}
+
+/* ========== Pagination ========== */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 16px;
+}
+
+.pagination button {
+  padding: 8px 12px;
+  border: 2px solid var(--lavender-light);
+  background: transparent;
+  border-radius: var(--radius-md);
+  font-family: var(--font-main);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.9rem;
+}
+
+.pagination button:hover:not(:disabled) {
+  background: var(--lavender-light);
+  transform: scale(1.05);
+}
+
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-info {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  min-width: 120px;
+  text-align: center;
+}
+
+/* ========== Balance Summary ========== */
+.balance-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+.balance-item {
+  text-align: center;
+  padding: 12px 8px;
+  border-radius: var(--radius-md);
+  background: var(--bg-glass);
+  backdrop-filter: blur(10px);
+}
+
+.balance-item .label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.balance-item .value {
+  font-size: 1.2rem;
+  font-weight: bold;
+  animation: countUp 0.6s ease;
+}
+
+.balance-item .value.net {
+  color: var(--income-color);
+}
+
+/* ========== Category Tabs ========== */
+.category-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 2px solid var(--lavender-light);
+}
+
+.category-tab {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-main);
+  font-size: 0.95rem;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s ease;
+  margin-bottom: -2px;
+}
+
+.category-tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--sakura-pink);
+}
+
+/* ========== Category Management ========== */
+.category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.category-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: var(--bg-glass);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(200, 162, 200, 0.2);
+}
+
+.category-list-item .name {
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.category-list-item .emoji {
+  font-size: 1.2rem;
+  margin-right: 8px;
+}
+
+.category-list-item.default {
+  opacity: 0.7;
+}
+
+.category-list-item .delete-btn {
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+}
+
+.category-list-item .delete-btn:hover {
+  opacity: 1;
+}
+
+.category-add-form {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-glass);
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--lavender-light);
+}
+
+.category-add-form input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--lavender-light);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-main);
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.category-add-form input:focus {
+  outline: none;
+  border-color: var(--sakura-pink);
+}
+
+.category-add-form button {
+  padding: 8px 16px;
+  background: var(--gradient-income);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-main);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+}
+
+.category-add-form button:hover {
+  transform: scale(1.05);
+}
+
+/* ========== Dark Mode ========== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sakura-pink: #E8869B;
+    --sakura-pink-light: #C8A2C8;
+    --sakura-pink-dark: #B07398;
+    --lavender: #8A6B8A;
+    --lavender-light: #6A4B6A;
+    --lavender-dark: #5A3B5A;
+    --mint: #6BC4A8;
+    --mint-light: #5BA498;
+    --mint-dark: #4BA488;
+
+    --bg-primary: #1A1A1E;
+    --bg-secondary: #232329;
+    --bg-card: rgba(40, 40, 50, 0.65);
+    --bg-glass: rgba(40, 40, 50, 0.45);
+
+    --text-primary: #E8E8E8;
+    --text-secondary: #B8B8C8;
+    --text-muted: #888898;
+
+    --income-color: #6BC4A8;
+    --expense-color: #E8869B;
+    --income-bg: rgba(107, 196, 168, 0.15);
+    --expense-bg: rgba(232, 134, 155, 0.15);
+
+    --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.3);
+    --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4);
+    --shadow-float: 0 12px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  body::before {
+    opacity: 0.15;
+  }
+
+  .input-field {
+    background: rgba(60, 60, 70, 0.7);
+    color: var(--text-primary);
+  }
+
+  .input-field::placeholder {
+    color: var(--text-muted);
+  }
+
+  .input-field:focus {
+    border-color: var(--sakura-pink);
+    box-shadow: 0 0 0 3px rgba(232, 134, 155, 0.2);
+  }
+
+  .modal-content {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+
+  .form-group label {
+    color: var(--text-secondary);
+  }
+}
+
 /* ========== Responsive ========== */
 @media (max-width: 360px) {
   .category-grid {

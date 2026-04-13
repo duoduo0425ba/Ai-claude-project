@@ -1,4 +1,4 @@
-export default function TransactionCard({ transaction, onDelete }) {
+export default function TransactionCard({ transaction, onDelete, onEdit }) {
   const { id, type, amount, category, emoji, note, date } = transaction;
 
   return (
@@ -13,8 +13,17 @@ export default function TransactionCard({ transaction, onDelete }) {
       <div className={`transaction-amount ${type}`}>
         {type === 'income' ? '+' : '-'}¥{amount.toFixed(2)}
       </div>
-      {onDelete && (
-        <div className="transaction-actions">
+      <div className="transaction-actions">
+        {onEdit && (
+          <button
+            className="btn btn-ghost"
+            onClick={() => onEdit(transaction)}
+            id={`edit-${id}`}
+          >
+            ✏️
+          </button>
+        )}
+        {onDelete && (
           <button
             className="btn btn-danger"
             onClick={() => onDelete(id)}
@@ -22,8 +31,8 @@ export default function TransactionCard({ transaction, onDelete }) {
           >
             🗑️
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

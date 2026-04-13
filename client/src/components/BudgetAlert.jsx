@@ -3,13 +3,24 @@ import { getBudgetStatus } from '../api';
 
 export default function BudgetAlert() {
   const [budget, setBudget] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const now = new Date();
     getBudgetStatus(now.getFullYear(), now.getMonth() + 1)
       .then((res) => setBudget(res.data))
-      .catch(() => {});
+      .catch((err) => setError(err.message || '加载预算信息失败'));
   }, []);
+
+  if (error) {
+    return (
+      <div className="budget-card animate-slide-up section-gap" style={{ borderColor: 'var(--expense-color)', background: 'rgba(232, 134, 155, 0.1)' }}>
+        <div style={{ color: 'var(--expense-color)', fontSize: '0.9rem', textAlign: 'center', padding: '12px 0' }}>
+          ⚠️ {error}
+        </div>
+      </div>
+    );
+  }
 
   if (!budget) return null;
 

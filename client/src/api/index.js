@@ -19,6 +19,9 @@ export const getTransactions = (params = {}) => {
 export const addTransaction = (data) =>
   request('/transactions', { method: 'POST', body: JSON.stringify(data) });
 
+export const updateTransaction = (id, data) =>
+  request(`/transactions/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
 export const deleteTransaction = (id) =>
   request(`/transactions/${id}`, { method: 'DELETE' });
 
@@ -40,6 +43,19 @@ export const getYearlyStats = (year) =>
 
 export const getBudgetStatus = (year, month) =>
   request(`/transactions/stats/budget?year=${year}&month=${month}`);
+
+export const getTotalBalance = () =>
+  request('/transactions/stats/balance');
+
+// 分类管理
+export const getCategories = (type) =>
+  request(`/categories?type=${type}`);
+
+export const addCategory = (data) =>
+  request('/categories', { method: 'POST', body: JSON.stringify(data) });
+
+export const deleteCategory = (id) =>
+  request(`/categories/${id}`, { method: 'DELETE' });
 
 // 设置
 export const getSettings = () => request('/transactions/settings');

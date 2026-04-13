@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const transactionsRouter = require('./routes/transactions');
+const categoriesRouter = require('./routes/categories');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -12,6 +13,7 @@ app.use(express.json({ limit: '10mb' }));
 
 // API 路由
 app.use('/api/transactions', transactionsRouter);
+app.use('/api/categories', categoriesRouter);
 app.use('/api/settings', (req, res, next) => {
   // settings 路由复用 transactions 文件中的 settings 部分
   // 由于 settings 路由在 transactions.js 中已处理，这里直接代理

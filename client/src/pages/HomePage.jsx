@@ -2,19 +2,14 @@ import { useState, useCallback } from 'react';
 import BudgetAlert from '../components/BudgetAlert';
 import TransactionForm from '../components/TransactionForm';
 import DailySummary from '../components/DailySummary';
+import BalanceSummary from '../components/BalanceSummary';
+import ToastContainer from '../components/ToastContainer';
+import { useToast } from '../hooks/useToast';
 
 export default function HomePage() {
   const today = new Date().toISOString().slice(0, 10);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [toasts, setToasts] = useState([]);
-
-  const showToast = useCallback((message, type = 'success') => {
-    const id = Date.now();
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3000);
-  }, []);
+  const { toasts, showToast } = useToast();
 
   const handleSuccess = useCallback((msg, type) => {
     showToast(msg, type);
@@ -25,16 +20,7 @@ export default function HomePage() {
 
   return (
     <div className="page">
-      {/* Toasts */}
-      {toasts.length > 0 && (
-        <div className="toast-container">
-          {toasts.map((t) => (
-            <div key={t.id} className={`toast ${t.type}`}>
-              {t.message}
-            </div>
-          ))}
-        </div>
-      )}
+      <ToastContainer toasts={toasts} />
 
       <div className="page-header">
         <h1>🌸 零花钱记账</h1>
@@ -43,6 +29,7 @@ export default function HomePage() {
 
       <BudgetAlert key={refreshKey} />
       <DailySummary date={today} refreshKey={refreshKey} />
+      <BalanceSummary key={refreshKey} />
       <TransactionForm onSuccess={handleSuccess} />
     </div>
   );

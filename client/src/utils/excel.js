@@ -78,6 +78,7 @@ function parseCategory(value) {
     '交通': { name: '交通', emoji: '🚌' },
     '娱乐': { name: '娱乐', emoji: '🎮' },
     '礼物': { name: '礼物', emoji: '🎁' },
+    '服饰': { name: '服饰', emoji: '👗' },
     '其他': { name: '其他', emoji: '✨' },
     '零花钱': { name: '零花钱', emoji: '💰' },
     '红包': { name: '红包', emoji: '🧧' },

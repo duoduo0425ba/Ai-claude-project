@@ -15,6 +15,8 @@ import {
 import { Bar, Line, Pie } from 'react-chartjs-2';
 import { getWeeklyStats, getMonthlyStats, getYearlyStats, getTransactions } from '../api';
 import { exportToExcel } from '../utils/excel';
+import ToastContainer from '../components/ToastContainer';
+import { useToast } from '../hooks/useToast';
 
 ChartJS.register(
   CategoryScale,
@@ -118,43 +120,76 @@ export default function ReportPage() {
   const [tab, setTab] = useState('weekly');
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+  const [weekOffset, setWeekOffset] = useState(0);
   const [weeklyData, setWeeklyData] = useState(null);
   const [monthlyData, setMonthlyData] = useState(null);
   const [yearlyData, setYearlyData] = useState(null);
-  const [toasts, setToasts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const { toasts, showToast } = useToast();
 
-  const showToast = useCallback((message, type = 'success') => {
-    const id = Date.now();
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3000);
-  }, []);
+  // 计算周偏移后的日期
+  const getWeekDate = () => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + weekOffset * 7);
+    return d.toISOString().slice(0, 10);
+  };
 
   useEffect(() => {
+    setLoading(true);
     if (tab === 'weekly') {
-      getWeeklyStats(now.toISOString().slice(0, 10))
+      getWeeklyStats(getWeekDate())
         .then((res) => setWeeklyData(res.data))
-        .catch(() => {});
+        .catch((err) => showToast(err.message || '加载周报失败', 'error'))
+        .finally(() => setLoading(false));
     } else if (tab === 'monthly') {
       getMonthlyStats(year, month)
         .then((res) => setMonthlyData(res.data))
-        .catch(() => {});
+        .catch((err) => showToast(err.message || '加载月报失败', 'error'))
+        .finally(() => setLoading(false));
     } else {
       getYearlyStats(year)
         .then((res) => setYearlyData(res.data))
-        .catch(() => {});
+        .catch((err) => showToast(err.message || '加载年报失败', 'error'))
+        .finally(() => setLoading(false));
     }
-  }, [tab, year, month]);
+  }, [tab, year, month, weekOffset]);
 
   const handleExport = async () => {
     try {
-      const res = await getTransactions({});
+      let params = {};
+      let filename = '零花钱记账';
+
+      if (tab === 'weekly') {
+        const weekDate = getWeekDate();
+        const d = new Date(weekDate);
+        const monday = new Date(d);
+        monday.setDate(d.getDate() - (d.getDay() === 0 ? 6 : d.getDay() - 1));
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+
+        params.startDate = monday.toISOString().slice(0, 10);
+        params.endDate = sunday.toISOString().slice(0, 10);
+        filename = `零花钱记账_${params.startDate}_to_${params.endDate}`;
+      } else if (tab === 'monthly') {
+        const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+
+        params.startDate = monthStart;
+        params.endDate = monthEnd;
+        filename = `零花钱记账_${year}-${String(month).padStart(2, '0')}`;
+      } else {
+        params.startDate = `${year}-01-01`;
+        params.endDate = `${year}-12-31`;
+        filename = `零花钱记账_${year}`;
+      }
+
+      const res = await getTransactions(params);
       if (res.data.length === 0) {
         showToast('没有数据可以导出 😅', 'warn');
         return;
       }
-      exportToExcel(res.data, `零花钱记账_${year}`);
+      exportToExcel(res.data, filename);
       showToast('导出成功 📥');
     } catch (err) {
       showToast(err.message, 'error');
@@ -187,8 +222,18 @@ export default function ReportPage() {
     const totalIncome = weeklyData.reduce((s, d) => s + d.income, 0);
     const totalExpense = weeklyData.reduce((s, d) => s + d.expense, 0);
 
+    // 计算周范围标签
+    const weekStartDate = new Date(weeklyData[0]?.date);
+    const weekEndDate = new Date(weeklyData[6]?.date);
+    const weekLabel = `${weekStartDate.getMonth() + 1}月${weekStartDate.getDate()}日 - ${weekEndDate.getMonth() + 1}月${weekEndDate.getDate()}日`;
+
     return (
       <div className="animate-fade-in">
+        <div className="period-nav section-gap" style={{ marginBottom: '0' }}>
+          <button onClick={() => setWeekOffset(w => w - 1)}>◀</button>
+          <span className="period-label">{weekLabel}</span>
+          <button onClick={() => setWeekOffset(w => w + 1)}>▶</button>
+        </div>
         <div className="report-summary section-gap">
           <div className="report-summary-item">
             <div className="label">本周收入</div>
@@ -252,6 +297,21 @@ export default function ReportPage() {
       ],
     };
 
+    const incomePieData = {
+      labels: monthlyData.incomeCategories.map((c) => `${c.emoji} ${c.category}`),
+      datasets: [
+        {
+          data: monthlyData.incomeCategories.map((c) => c.total),
+          backgroundColor: CHART_COLORS.pieColors.slice(0, monthlyData.incomeCategories.length),
+          borderWidth: 2,
+          borderColor: '#fff',
+        },
+      ],
+    };
+
+    const daysInMonth = monthlyData.daily.length;
+    const dailyExpenseAvg = monthlyData.totalExpense / daysInMonth;
+
     return (
       <div className="animate-fade-in">
         <div className="period-nav">
@@ -279,6 +339,12 @@ export default function ReportPage() {
               -¥{monthlyData.totalExpense.toFixed(2)}
             </div>
           </div>
+          <div className="report-summary-item">
+            <div className="label">日均支出</div>
+            <div className="value" style={{ color: 'var(--expense-color)' }}>
+              ¥{dailyExpenseAvg.toFixed(2)}
+            </div>
+          </div>
         </div>
 
         <div className="chart-container section-gap">
@@ -294,6 +360,15 @@ export default function ReportPage() {
             </div>
           </div>
         )}
+
+        {monthlyData.incomeCategories && monthlyData.incomeCategories.length > 0 && (
+          <div className="chart-container section-gap">
+            <h3>🍰 收入分类占比</h3>
+            <div style={{ maxWidth: '300px', margin: '0 auto' }}>
+              <Pie data={incomePieData} options={pieOptions} />
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -301,19 +376,20 @@ export default function ReportPage() {
   const renderYearly = () => {
     if (!yearlyData) return null;
 
+    const months = yearlyData.months || yearlyData; // 兼容旧数据格式
     const data = {
-      labels: yearlyData.map((d) => d.label),
+      labels: months.map((d) => d.label),
       datasets: [
         {
           label: '收入',
-          data: yearlyData.map((d) => d.income),
+          data: months.map((d) => d.income),
           backgroundColor: CHART_COLORS.income,
           borderRadius: 6,
           borderSkipped: false,
         },
         {
           label: '支出',
-          data: yearlyData.map((d) => d.expense),
+          data: months.map((d) => d.expense),
           backgroundColor: CHART_COLORS.expense,
           borderRadius: 6,
           borderSkipped: false,
@@ -321,8 +397,10 @@ export default function ReportPage() {
       ],
     };
 
-    const totalIncome = yearlyData.reduce((s, d) => s + d.income, 0);
-    const totalExpense = yearlyData.reduce((s, d) => s + d.expense, 0);
+    const totalIncome = months.reduce((s, d) => s + d.income, 0);
+    const totalExpense = months.reduce((s, d) => s + d.expense, 0);
+    const avgMonthlyExpense = totalExpense / 12;
+    const avgMonthlyIncome = totalIncome / 12;
 
     return (
       <div className="animate-fade-in">
@@ -345,27 +423,53 @@ export default function ReportPage() {
               -¥{totalExpense.toFixed(2)}
             </div>
           </div>
+          <div className="report-summary-item">
+            <div className="label">月均支出</div>
+            <div className="value" style={{ color: 'var(--expense-color)' }}>
+              ¥{avgMonthlyExpense.toFixed(2)}
+            </div>
+          </div>
         </div>
 
         <div className="chart-container section-gap">
           <h3>📊 {year}年每月收支汇总</h3>
           <Bar data={data} options={commonOptions} />
         </div>
+
+        {yearlyData.expenseCategories && yearlyData.expenseCategories.length > 0 && (
+          <div className="chart-container section-gap">
+            <h3>🏆 年度支出分类 TOP 8</h3>
+            <div style={{ fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {yearlyData.expenseCategories.map((cat, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0' }}>
+                  <span>{cat.emoji} {cat.category}</span>
+                  <span style={{ fontWeight: 'bold', color: 'var(--expense-color)' }}>¥{cat.total.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {yearlyData.incomeCategories && yearlyData.incomeCategories.length > 0 && (
+          <div className="chart-container section-gap">
+            <h3>🏆 年度收入分类 TOP 8</h3>
+            <div style={{ fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {yearlyData.incomeCategories.map((cat, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0' }}>
+                  <span>{cat.emoji} {cat.category}</span>
+                  <span style={{ fontWeight: 'bold', color: 'var(--income-color)' }}>¥{cat.total.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
 
   return (
     <div className="page">
-      {toasts.length > 0 && (
-        <div className="toast-container">
-          {toasts.map((t) => (
-            <div key={t.id} className={`toast ${t.type}`}>
-              {t.message}
-            </div>
-          ))}
-        </div>
-      )}
+      <ToastContainer toasts={toasts} />
 
       <div className="page-header">
         <h1>📊 报表统计</h1>
@@ -391,9 +495,15 @@ export default function ReportPage() {
       </div>
 
       {/* 图表内容 */}
-      {tab === 'weekly' && renderWeekly()}
-      {tab === 'monthly' && renderMonthly()}
-      {tab === 'yearly' && renderYearly()}
+      {loading ? (
+        <div className="loading-state">加载中...</div>
+      ) : (
+        <>
+          {tab === 'weekly' && renderWeekly()}
+          {tab === 'monthly' && renderMonthly()}
+          {tab === 'yearly' && renderYearly()}
+        </>
+      )}
 
       {/* 导出按钮 */}
       <div style={{ marginTop: '16px', textAlign: 'center' }}>

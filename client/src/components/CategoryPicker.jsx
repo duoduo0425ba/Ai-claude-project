@@ -1,3 +1,6 @@
+import { useState, useEffect } from 'react';
+import { getCategories } from '../api';
+
 const EXPENSE_CATEGORIES = [
   { name: '餐饮', emoji: '🍜' },
   { name: '零食', emoji: '🍡' },
@@ -18,11 +21,47 @@ const INCOME_CATEGORIES = [
 ];
 
 export default function CategoryPicker({ type, selected, onSelect }) {
-  const categories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const [categories, setCategories] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const fallback = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+
+  useEffect(() => {
+    let isMounted = true;
+
+    setIsLoading(true);
+    getCategories(type)
+      .then((res) => {
+        if (isMounted) {
+          // 转换 API 响应格式（忽略 id 和 is_default）
+          const data = res.data.map((cat) => ({
+            name: cat.name,
+            emoji: cat.emoji,
+          }));
+          setCategories(data);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          // API 失败时使用硬编码列表
+          setCategories(null); // 重置为null，使用fallback
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [type]);
+
+  const items = categories || fallback;
 
   return (
     <div className="category-grid">
-      {categories.map((cat) => (
+      {items.map((cat) => (
         <div
           key={cat.name}
           className={`category-item ${selected === cat.name ? 'selected' : ''}`}

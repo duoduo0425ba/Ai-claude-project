@@ -1,7 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getTransactions, deleteTransaction, batchImport } from '../api';
 import { importFromExcel, exportToExcel } from '../utils/excel';
 import TransactionCard from '../components/TransactionCard';
+import EditTransactionForm from '../components/EditTransactionForm';
+import ToastContainer from '../components/ToastContainer';
+import { useToast } from '../hooks/useToast';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../components/CategoryPicker';
 
 const ALL_CATEGORIES = [
@@ -10,37 +14,80 @@ const ALL_CATEGORIES = [
   ...INCOME_CATEGORIES,
 ];
 
+const ITEMS_PER_PAGE = 30;
+
 export default function ListPage() {
   const [transactions, setTransactions] = useState([]);
   const [keyword, setKeyword] = useState('');
-  const [filterCategory, setFilterCategory] = useState('全部');
-  const [toasts, setToasts] = useState([]);
+  const [filterCategory, setFilterCategory] = useLocalStorage('listPageCategory', '全部');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [showBalanceModal, setShowBalanceModal] = useState(false);
   const [initialBalance, setInitialBalance] = useState('');
-
-  const showToast = useCallback((message, type = 'success') => {
-    const id = Date.now();
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3000);
-  }, []);
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const abortControllerRef = useRef(null);
+  const { toasts, showToast } = useToast();
 
   const loadData = useCallback(async () => {
     try {
+      // 取消前一个请求
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+
+      // 创建新的 AbortController
+      abortControllerRef.current = new AbortController();
+
+      setLoading(true);
       const params = {};
       if (filterCategory !== '全部') params.category = filterCategory;
       if (keyword) params.keyword = keyword;
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
       const res = await getTransactions(params);
       setTransactions(res.data);
+      setCurrentPage(1);
     } catch (err) {
-      showToast(err.message, 'error');
+      if (err.name !== 'AbortError') {
+        showToast(err.message, 'error');
+      }
+    } finally {
+      setLoading(false);
     }
-  }, [filterCategory, keyword, showToast]);
+  }, [filterCategory, keyword, startDate, endDate, showToast]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // 快捷键支持 (Escape 关闭弹窗)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowEditModal(false);
+        setShowBalanceModal(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleEdit = (transaction) => {
+    setEditingTransaction(transaction);
+    setShowEditModal(true);
+  };
+
+  const handleEditSuccess = (msg, type) => {
+    showToast(msg, type);
+    if (type === 'success') {
+      setShowEditModal(false);
+      setEditingTransaction(null);
+      loadData();
+    }
+  };
 
   const handleDelete = async (id) => {
     if (!confirm('确认删除这条记录吗？')) return;
@@ -114,15 +161,7 @@ export default function ListPage() {
 
   return (
     <div className="page">
-      {toasts.length > 0 && (
-        <div className="toast-container">
-          {toasts.map((t) => (
-            <div key={t.id} className={`toast ${t.type}`}>
-              {t.message}
-            </div>
-          ))}
-        </div>
-      )}
+      <ToastContainer toasts={toasts} />
 
       <div className="page-header">
         <h1>📋 账单列表</h1>
@@ -139,6 +178,44 @@ export default function ListPage() {
           onChange={(e) => setKeyword(e.target.value)}
           id="search-input"
         />
+      </div>
+
+      {/* 日期范围筛选 */}
+      <div className="date-range-filter section-gap" style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'var(--text-secondary)' }}>
+            开始日期
+          </label>
+          <input
+            type="date"
+            className="input-field"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            id="filter-start-date"
+          />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px', color: 'var(--text-secondary)' }}>
+            结束日期
+          </label>
+          <input
+            type="date"
+            className="input-field"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            id="filter-end-date"
+          />
+        </div>
+        {(startDate || endDate) && (
+          <button
+            className="btn btn-ghost"
+            onClick={() => { setStartDate(''); setEndDate(''); }}
+            style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+            id="btn-clear-dates"
+          >
+            清除
+          </button>
+        )}
       </div>
 
       {/* 分类筛选 */}
@@ -169,38 +246,82 @@ export default function ListPage() {
       </div>
 
       {/* 账单列表 */}
-      {sortedDates.length === 0 ? (
+      {loading ? (
+        <div className="loading-state">加载中...</div>
+      ) : sortedDates.length === 0 ? (
         <div className="empty-state">
           <div className="empty-emoji">🐱</div>
-          <p>还没有记录哦，去记一笔吧~</p>
+          {(filterCategory !== '全部' || keyword || startDate || endDate) ? (
+            <>
+              <p>没有符合条件的记录呢</p>
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  setFilterCategory('全部');
+                  setKeyword('');
+                  setStartDate('');
+                  setEndDate('');
+                }}
+                style={{ marginTop: '12px' }}
+              >
+                清除筛选
+              </button>
+            </>
+          ) : (
+            <p>还没有记录哦，去记一笔吧~</p>
+          )}
         </div>
       ) : (
-        sortedDates.map((date) => {
-          const items = grouped[date];
-          const dayIncome = items.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-          const dayExpense = items.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+        <>
+          {sortedDates.slice((currentPage - 1) * ITEMS_PER_PAGE / (sortedDates.length), currentPage * ITEMS_PER_PAGE / (sortedDates.length)).map((date) => {
+            const items = grouped[date];
+            const dayIncome = items.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+            const dayExpense = items.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
 
-          return (
-            <div key={date} className="date-group">
-              <div className="date-group-header">
-                <span className="date-label">{date}</span>
-                <span className="date-total">
-                  收 +¥{dayIncome.toFixed(2)} &nbsp; 支 -¥{dayExpense.toFixed(2)}
-                </span>
+            return (
+              <div key={date} className="date-group">
+                <div className="date-group-header">
+                  <span className="date-label">{date}</span>
+                  <span className="date-total">
+                    收 +¥{dayIncome.toFixed(2)} &nbsp; 支 -¥{dayExpense.toFixed(2)}
+                  </span>
+                </div>
+                <div className="transaction-list">
+                  {items.slice(0, ITEMS_PER_PAGE).map((t, i) => (
+                    <TransactionCard
+                      key={t.id}
+                      transaction={t}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                      style={{ animationDelay: `${i * 0.05}s` }}
+                    />
+                  ))}
+                </div>
               </div>
-              <div className="transaction-list">
-                {items.map((t, i) => (
-                  <TransactionCard
-                    key={t.id}
-                    transaction={t}
-                    onDelete={handleDelete}
-                    style={{ animationDelay: `${i * 0.05}s` }}
-                  />
-                ))}
-              </div>
+            );
+          })}
+
+          {/* 分页 */}
+          {transactions.length > ITEMS_PER_PAGE && (
+            <div className="pagination">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                ◀ 上一页
+              </button>
+              <span className="pagination-info">
+                {currentPage} / {Math.ceil(transactions.length / ITEMS_PER_PAGE)}
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => p + 1)}
+                disabled={currentPage >= Math.ceil(transactions.length / ITEMS_PER_PAGE)}
+              >
+                下一页 ▶
+              </button>
             </div>
-          );
-        })
+          )}
+        </>
       )}
 
       {/* 填入结余弹窗 */}
@@ -229,6 +350,19 @@ export default function ListPage() {
                 确认添加
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 编辑记录弹窗 */}
+      {showEditModal && editingTransaction && (
+        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <EditTransactionForm
+              transaction={editingTransaction}
+              onSuccess={handleEditSuccess}
+              onCancel={() => setShowEditModal(false)}
+            />
           </div>
         </div>
       )}

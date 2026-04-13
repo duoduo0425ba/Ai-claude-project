@@ -2,6 +2,38 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 
+// ========== 设置路由 (需要在 /:id 之前定义) ==========
+
+router.get('/settings', (req, res) => {
+  try {
+    const settings = {};
+    db.prepare('SELECT key, value FROM settings').all().forEach(row => {
+      settings[row.key] = row.value;
+    });
+    res.json({ success: true, data: settings });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/settings', (req, res) => {
+  try {
+    const updates = req.body;
+    const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
+
+    const updateMany = db.transaction((items) => {
+      for (const [key, value] of Object.entries(items)) {
+        stmt.run(key, String(value));
+      }
+    });
+
+    updateMany(updates);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ========== 交易记录 CRUD ==========
 
 // 获取所有交易记录（支持筛选）
@@ -58,6 +90,35 @@ router.post('/', (req, res) => {
     const result = stmt.run(type, amount, category, emoji || '', note || '', date);
     const newRecord = db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid);
     res.json({ success: true, data: newRecord });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 编辑一条记录
+router.put('/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { type, amount, category, emoji, note, date } = req.body;
+
+    if (!type || !amount || !category || !date) {
+      return res.status(400).json({ success: false, error: '缺少必填字段' });
+    }
+
+    const stmt = db.prepare(`
+      UPDATE transactions
+      SET type = ?, amount = ?, category = ?, emoji = ?, note = ?, date = ?
+      WHERE id = ?
+    `);
+
+    const result = stmt.run(type, amount, category, emoji || '', note || '', date, id);
+
+    if (result.changes === 0) {
+      return res.status(404).json({ success: false, error: '记录不存在' });
+    }
+
+    const updatedRecord = db.prepare('SELECT * FROM transactions WHERE id = ?').get(id);
+    res.json({ success: true, data: updatedRecord });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -216,6 +277,14 @@ router.get('/stats/monthly', (req, res) => {
       ORDER BY total DESC
     `).all(monthStart, monthEnd);
 
+    const incomeCategories = db.prepare(`
+      SELECT category, emoji, SUM(amount) as total
+      FROM transactions
+      WHERE type = 'income' AND date >= ? AND date <= ?
+      GROUP BY category
+      ORDER BY total DESC
+    `).all(monthStart, monthEnd);
+
     const totalIncome = db.prepare(
       "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'income' AND date >= ? AND date <= ?"
     ).get(monthStart, monthEnd);
@@ -229,6 +298,7 @@ router.get('/stats/monthly', (req, res) => {
       data: {
         daily,
         categories,
+        incomeCategories,
         totalIncome: totalIncome.total,
         totalExpense: totalExpense.total,
         balance: totalIncome.total - totalExpense.total
@@ -244,6 +314,8 @@ router.get('/stats/yearly', (req, res) => {
   try {
     const { year } = req.query;
     const y = parseInt(year) || new Date().getFullYear();
+    const yearStart = `${y}-01-01`;
+    const yearEnd = `${y}-12-31`;
 
     const months = [];
     for (let m = 1; m <= 12; m++) {
@@ -267,7 +339,68 @@ router.get('/stats/yearly', (req, res) => {
       });
     }
 
-    res.json({ success: true, data: months });
+    // 年度支出分类汇总（前8个）
+    const expenseCategories = db.prepare(`
+      SELECT category, emoji, SUM(amount) as total
+      FROM transactions
+      WHERE type = 'expense' AND date >= ? AND date <= ?
+      GROUP BY category
+      ORDER BY total DESC
+      LIMIT 8
+    `).all(yearStart, yearEnd);
+
+    // 年度收入分类汇总（前8个）
+    const incomeCategories = db.prepare(`
+      SELECT category, emoji, SUM(amount) as total
+      FROM transactions
+      WHERE type = 'income' AND date >= ? AND date <= ?
+      GROUP BY category
+      ORDER BY total DESC
+      LIMIT 8
+    `).all(yearStart, yearEnd);
+
+    res.json({
+      success: true,
+      data: {
+        months,
+        expenseCategories,
+        incomeCategories
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 总余额统计
+router.get('/stats/balance', (req, res) => {
+  try {
+    const settings = {};
+    db.prepare('SELECT key, value FROM settings').all().forEach(row => {
+      settings[row.key] = row.value;
+    });
+
+    const initialBalance = parseFloat(settings.initial_balance) || 0;
+
+    const totalIncome = db.prepare(
+      "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'income'"
+    ).get();
+
+    const totalExpense = db.prepare(
+      "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'expense'"
+    ).get();
+
+    const netBalance = initialBalance + totalIncome.total - totalExpense.total;
+
+    res.json({
+      success: true,
+      data: {
+        initialBalance,
+        totalIncome: totalIncome.total,
+        totalExpense: totalExpense.total,
+        netBalance
+      }
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -326,38 +459,6 @@ router.get('/stats/budget', (req, res) => {
         progress: Math.min((spent / monthlyIncome) * 100, 100)
       }
     });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ========== 设置 ==========
-
-router.get('/settings', (req, res) => {
-  try {
-    const settings = {};
-    db.prepare('SELECT key, value FROM settings').all().forEach(row => {
-      settings[row.key] = row.value;
-    });
-    res.json({ success: true, data: settings });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.put('/settings', (req, res) => {
-  try {
-    const updates = req.body;
-    const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
-
-    const updateMany = db.transaction((items) => {
-      for (const [key, value] of Object.entries(items)) {
-        stmt.run(key, String(value));
-      }
-    });
-
-    updateMany(updates);
-    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

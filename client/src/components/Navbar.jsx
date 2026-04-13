@@ -28,6 +28,14 @@ export default function Navbar() {
           <span className="nav-icon">📊</span>
           <span>报表</span>
         </NavLink>
+        <NavLink
+          to="/settings"
+          className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+          id="nav-settings"
+        >
+          <span className="nav-icon">⚙️</span>
+          <span>设置</span>
+        </NavLink>
       </div>
     </nav>
   );
