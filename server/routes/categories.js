@@ -3,73 +3,53 @@ const db = require('../db');
 
 const router = express.Router();
 
-// GET /api/categories?type=expense|income
 router.get('/', (req, res) => {
   const { type } = req.query;
   if (!type || !['income', 'expense'].includes(type)) {
     return res.json({ success: false, error: '参数错误：type 必须为 income 或 expense' });
   }
-
   const categories = db.prepare(`
     SELECT id, type, name, emoji, is_default
     FROM categories
-    WHERE type = ?
+    WHERE type = ? AND user_id = ?
     ORDER BY is_default DESC, id ASC
-  `).all(type);
-
+  `).all(type, req.user.userId);
   res.json({ success: true, data: categories });
 });
 
-// POST /api/categories
 router.post('/', (req, res) => {
   const { type, name, emoji } = req.body;
-
   if (!type || !['income', 'expense'].includes(type)) {
     return res.json({ success: false, error: '参数错误：type 必须为 income 或 expense' });
   }
-
-  if (!name || !name.trim()) {
-    return res.json({ success: false, error: '分类名称不能为空' });
-  }
-
-  if (!emoji || !emoji.trim()) {
-    return res.json({ success: false, error: '分类表情不能为空' });
-  }
+  if (!name || !name.trim()) return res.json({ success: false, error: '分类名称不能为空' });
+  if (!emoji || !emoji.trim()) return res.json({ success: false, error: '分类表情不能为空' });
 
   try {
-    const result = db.prepare(`
-      INSERT INTO categories (type, name, emoji, is_default)
-      VALUES (?, ?, ?, 0)
-    `).run(type, name.trim(), emoji.trim());
+    const result = db.prepare(
+      'INSERT INTO categories (type, name, emoji, is_default, user_id) VALUES (?, ?, ?, 0, ?)'
+    ).run(type, name.trim(), emoji.trim(), req.user.userId);
 
-    const category = db.prepare(`
-      SELECT id, type, name, emoji, is_default
-      FROM categories
-      WHERE id = ?
-    `).get(result.lastInsertRowid);
-
+    const category = db.prepare('SELECT id, type, name, emoji, is_default FROM categories WHERE id = ?')
+      .get(result.lastInsertRowid);
     res.json({ success: true, data: category });
   } catch (err) {
+    if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return res.json({ success: false, error: '同类型下已存在同名分类' });
+    }
     res.json({ success: false, error: err.message });
   }
 });
 
-// DELETE /api/categories/:id
 router.delete('/:id', (req, res) => {
   const { id } = req.params;
-
-  // 检查是否为默认分类
-  const category = db.prepare('SELECT is_default FROM categories WHERE id = ?').get(id);
-  if (!category) {
-    return res.json({ success: false, error: '分类不存在' });
-  }
-
-  if (category.is_default === 1) {
-    return res.json({ success: false, error: '无法删除默认分类' });
-  }
+  const category = db.prepare('SELECT is_default FROM categories WHERE id = ? AND user_id = ?')
+    .get(id, req.user.userId);
+  if (!category) return res.json({ success: false, error: '分类不存在' });
+  if (category.is_default === 1) return res.json({ success: false, error: '无法删除默认分类' });
 
   try {
-    db.prepare('DELETE FROM categories WHERE id = ?').run(id);
+    db.prepare('DELETE FROM categories WHERE id = ? AND user_id = ?').run(id, req.user.userId);
     res.json({ success: true });
   } catch (err) {
     res.json({ success: false, error: err.message });

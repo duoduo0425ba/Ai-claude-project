@@ -1245,20 +1245,37 @@ body::before {
 .category-add-form {
   display: flex;
   gap: 8px;
+  align-items: center;
   padding: 12px;
   background: var(--bg-glass);
   border-radius: var(--radius-md);
   border: 1px dashed var(--lavender-light);
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .category-add-form input {
-  flex: 1;
+  min-width: 0;
   padding: 8px 12px;
   border: 1px solid var(--lavender-light);
   border-radius: var(--radius-sm);
   font-family: var(--font-main);
   font-size: 0.9rem;
+  box-sizing: border-box;
   background: rgba(255, 255, 255, 0.7);
+}
+
+.category-add-form .category-emoji-input {
+  flex: 0 0 72px;
+  width: 72px;
+  text-align: center;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.category-add-form .category-name-input {
+  flex: 1 1 auto;
 }
 
 .category-add-form input:focus {
@@ -1267,6 +1284,7 @@ body::before {
 }
 
 .category-add-form button {
+  flex: 0 0 auto;
   padding: 8px 16px;
   background: var(--gradient-income);
   color: white;
@@ -1282,9 +1300,30 @@ body::before {
   transform: scale(1.05);
 }
 
+@media (max-width: 520px) {
+  .category-add-form {
+    flex-wrap: wrap;
+  }
+
+  .category-add-form .category-emoji-input {
+    flex: 0 0 64px;
+    width: 64px;
+  }
+
+  .category-add-form .category-name-input {
+    flex: 1 1 calc(100% - 72px);
+  }
+
+  .category-add-form button {
+    width: 100%;
+  }
+}
+
 /* ========== Dark Mode ========== */
+
+/* 系统深色 + 用户未强制浅色 */
 @media (prefers-color-scheme: dark) {
-  :root {
+  html:not([data-theme="light"]) {
     --sakura-pink: #E8869B;
     --sakura-pink-light: #C8A2C8;
     --sakura-pink-dark: #B07398;
@@ -1314,33 +1353,51 @@ body::before {
     --shadow-float: 0 12px 40px rgba(0, 0, 0, 0.5);
   }
 
-  body::before {
-    opacity: 0.15;
-  }
-
-  .input-field {
-    background: rgba(60, 60, 70, 0.7);
-    color: var(--text-primary);
-  }
-
-  .input-field::placeholder {
-    color: var(--text-muted);
-  }
-
-  .input-field:focus {
-    border-color: var(--sakura-pink);
-    box-shadow: 0 0 0 3px rgba(232, 134, 155, 0.2);
-  }
-
-  .modal-content {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-  }
-
-  .form-group label {
-    color: var(--text-secondary);
-  }
+  html:not([data-theme="light"]) body::before { opacity: 0.15; }
+  html:not([data-theme="light"]) .input-field { background: rgba(60, 60, 70, 0.7); color: var(--text-primary); }
+  html:not([data-theme="light"]) .input-field::placeholder { color: var(--text-muted); }
+  html:not([data-theme="light"]) .input-field:focus { border-color: var(--sakura-pink); box-shadow: 0 0 0 3px rgba(232, 134, 155, 0.2); }
+  html:not([data-theme="light"]) .modal-content { background: var(--bg-secondary); color: var(--text-primary); }
+  html:not([data-theme="light"]) .form-group label { color: var(--text-secondary); }
 }
+
+/* 手动深色（覆盖系统浅色） */
+html[data-theme="dark"] {
+  --sakura-pink: #E8869B;
+  --sakura-pink-light: #C8A2C8;
+  --sakura-pink-dark: #B07398;
+  --lavender: #8A6B8A;
+  --lavender-light: #6A4B6A;
+  --lavender-dark: #5A3B5A;
+  --mint: #6BC4A8;
+  --mint-light: #5BA498;
+  --mint-dark: #4BA488;
+
+  --bg-primary: #1A1A1E;
+  --bg-secondary: #232329;
+  --bg-card: rgba(40, 40, 50, 0.65);
+  --bg-glass: rgba(40, 40, 50, 0.45);
+
+  --text-primary: #E8E8E8;
+  --text-secondary: #B8B8C8;
+  --text-muted: #888898;
+
+  --income-color: #6BC4A8;
+  --expense-color: #E8869B;
+  --income-bg: rgba(107, 196, 168, 0.15);
+  --expense-bg: rgba(232, 134, 155, 0.15);
+
+  --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-float: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+html[data-theme="dark"] body::before { opacity: 0.15; }
+html[data-theme="dark"] .input-field { background: rgba(60, 60, 70, 0.7); color: var(--text-primary); }
+html[data-theme="dark"] .input-field::placeholder { color: var(--text-muted); }
+html[data-theme="dark"] .input-field:focus { border-color: var(--sakura-pink); box-shadow: 0 0 0 3px rgba(232, 134, 155, 0.2); }
+html[data-theme="dark"] .modal-content { background: var(--bg-secondary); color: var(--text-primary); }
+html[data-theme="dark"] .form-group label { color: var(--text-secondary); }
 
 /* ========== Responsive ========== */
 @media (max-width: 360px) {

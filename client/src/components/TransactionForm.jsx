@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import CategoryPicker from './CategoryPicker';
 import { addTransaction } from '../api';
+import { formatLocalDate } from '../utils/date';
 
 export default function TransactionForm({ onSuccess }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = formatLocalDate();
   const [type, setType] = useState('expense');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('');

@@ -22,13 +22,11 @@ const INCOME_CATEGORIES = [
 
 export default function CategoryPicker({ type, selected, onSelect }) {
   const [categories, setCategories] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
   const fallback = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
   useEffect(() => {
     let isMounted = true;
 
-    setIsLoading(true);
     getCategories(type)
       .then((res) => {
         if (isMounted) {
@@ -44,11 +42,6 @@ export default function CategoryPicker({ type, selected, onSelect }) {
         if (isMounted) {
           // API 失败时使用硬编码列表
           setCategories(null); // 重置为null，使用fallback
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setIsLoading(false);
         }
       });
 

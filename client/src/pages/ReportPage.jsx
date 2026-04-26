@@ -15,6 +15,7 @@ import {
 import { Bar, Line, Pie } from 'react-chartjs-2';
 import { getWeeklyStats, getMonthlyStats, getYearlyStats, getTransactions } from '../api';
 import { exportToExcel } from '../utils/excel';
+import { formatLocalDate } from '../utils/date';
 import ToastContainer from '../components/ToastContainer';
 import { useToast } from '../hooks/useToast';
 
@@ -116,43 +117,85 @@ const pieOptions = {
 };
 
 export default function ReportPage() {
-  const now = new Date();
+  const [today] = useState(() => new Date());
   const [tab, setTab] = useState('weekly');
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth() + 1);
   const [weekOffset, setWeekOffset] = useState(0);
   const [weeklyData, setWeeklyData] = useState(null);
   const [monthlyData, setMonthlyData] = useState(null);
   const [yearlyData, setYearlyData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [activeError, setActiveError] = useState('');
   const { toasts, showToast } = useToast();
 
   // 计算周偏移后的日期
-  const getWeekDate = () => {
-    const d = new Date(now);
-    d.setDate(d.getDate() + weekOffset * 7);
-    return d.toISOString().slice(0, 10);
-  };
+  const getWeekDate = useCallback((offset = weekOffset) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + offset * 7);
+    return formatLocalDate(d);
+  }, [today, weekOffset]);
 
   useEffect(() => {
-    setLoading(true);
+    let isMounted = true;
+
     if (tab === 'weekly') {
       getWeeklyStats(getWeekDate())
-        .then((res) => setWeeklyData(res.data))
-        .catch((err) => showToast(err.message || '加载周报失败', 'error'))
-        .finally(() => setLoading(false));
+        .then((res) => {
+          if (!isMounted) return;
+          setWeeklyData(Array.isArray(res.data) ? res.data : []);
+        })
+        .catch((err) => {
+          if (!isMounted) return;
+          setWeeklyData([]);
+          setActiveError(err.message || '加载周报失败');
+          showToast(err.message || '加载周报失败', 'error');
+        })
+        .finally(() => {
+          if (isMounted) {
+            setLoading(false);
+          }
+        });
     } else if (tab === 'monthly') {
       getMonthlyStats(year, month)
-        .then((res) => setMonthlyData(res.data))
-        .catch((err) => showToast(err.message || '加载月报失败', 'error'))
-        .finally(() => setLoading(false));
+        .then((res) => {
+          if (!isMounted) return;
+          setMonthlyData(res.data || null);
+        })
+        .catch((err) => {
+          if (!isMounted) return;
+          setMonthlyData(null);
+          setActiveError(err.message || '加载月报失败');
+          showToast(err.message || '加载月报失败', 'error');
+        })
+        .finally(() => {
+          if (isMounted) {
+            setLoading(false);
+          }
+        });
     } else {
       getYearlyStats(year)
-        .then((res) => setYearlyData(res.data))
-        .catch((err) => showToast(err.message || '加载年报失败', 'error'))
-        .finally(() => setLoading(false));
+        .then((res) => {
+          if (!isMounted) return;
+          setYearlyData(res.data || null);
+        })
+        .catch((err) => {
+          if (!isMounted) return;
+          setYearlyData(null);
+          setActiveError(err.message || '加载年报失败');
+          showToast(err.message || '加载年报失败', 'error');
+        })
+        .finally(() => {
+          if (isMounted) {
+            setLoading(false);
+          }
+        });
     }
-  }, [tab, year, month, weekOffset]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [getWeekDate, month, showToast, tab, year]);
 
   const handleExport = async () => {
     try {
@@ -167,8 +210,8 @@ export default function ReportPage() {
         const sunday = new Date(monday);
         sunday.setDate(monday.getDate() + 6);
 
-        params.startDate = monday.toISOString().slice(0, 10);
-        params.endDate = sunday.toISOString().slice(0, 10);
+        params.startDate = formatLocalDate(monday);
+        params.endDate = formatLocalDate(sunday);
         filename = `零花钱记账_${params.startDate}_to_${params.endDate}`;
       } else if (tab === 'monthly') {
         const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
@@ -198,7 +241,9 @@ export default function ReportPage() {
 
   // ===== 渲染函数 =====
   const renderWeekly = () => {
-    if (!weeklyData) return null;
+    if (!weeklyData || weeklyData.length === 0) {
+      return <div className="empty-state"><p>这一周还没有数据哦~</p></div>;
+    }
     const data = {
       labels: weeklyData.map((d) => d.dayLabel),
       datasets: [
@@ -223,16 +268,28 @@ export default function ReportPage() {
     const totalExpense = weeklyData.reduce((s, d) => s + d.expense, 0);
 
     // 计算周范围标签
-    const weekStartDate = new Date(weeklyData[0]?.date);
-    const weekEndDate = new Date(weeklyData[6]?.date);
-    const weekLabel = `${weekStartDate.getMonth() + 1}月${weekStartDate.getDate()}日 - ${weekEndDate.getMonth() + 1}月${weekEndDate.getDate()}日`;
+    const firstDay = weeklyData[0];
+    const lastDay = weeklyData[weeklyData.length - 1];
+    const weekStartDate = firstDay?.date ? new Date(firstDay.date) : null;
+    const weekEndDate = lastDay?.date ? new Date(lastDay.date) : null;
+    const weekLabel = weekStartDate && weekEndDate
+      ? `${weekStartDate.getMonth() + 1}月${weekStartDate.getDate()}日 - ${weekEndDate.getMonth() + 1}月${weekEndDate.getDate()}日`
+      : '本周';
 
     return (
       <div className="animate-fade-in">
         <div className="period-nav section-gap" style={{ marginBottom: '0' }}>
-          <button onClick={() => setWeekOffset(w => w - 1)}>◀</button>
+          <button onClick={() => {
+            setLoading(true);
+            setActiveError('');
+            setWeekOffset((w) => w - 1);
+          }}>◀</button>
           <span className="period-label">{weekLabel}</span>
-          <button onClick={() => setWeekOffset(w => w + 1)}>▶</button>
+          <button onClick={() => {
+            setLoading(true);
+            setActiveError('');
+            setWeekOffset((w) => w + 1);
+          }}>▶</button>
         </div>
         <div className="report-summary section-gap">
           <div className="report-summary-item">
@@ -257,7 +314,9 @@ export default function ReportPage() {
   };
 
   const renderMonthly = () => {
-    if (!monthlyData) return null;
+    if (!monthlyData) {
+      return <div className="empty-state"><p>这个月的报表暂时不可用</p></div>;
+    }
 
     const lineData = {
       labels: monthlyData.daily.map((d) => `${d.day}日`),
@@ -309,18 +368,22 @@ export default function ReportPage() {
       ],
     };
 
-    const daysInMonth = monthlyData.daily.length;
-    const dailyExpenseAvg = monthlyData.totalExpense / daysInMonth;
+    const daysInMonth = monthlyData.daily?.length || 0;
+    const dailyExpenseAvg = daysInMonth > 0 ? monthlyData.totalExpense / daysInMonth : 0;
 
     return (
       <div className="animate-fade-in">
         <div className="period-nav">
           <button onClick={() => {
+            setLoading(true);
+            setActiveError('');
             if (month === 1) { setMonth(12); setYear(y => y - 1); }
             else setMonth(m => m - 1);
           }}>◀</button>
           <span className="period-label">{year}年{month}月</span>
           <button onClick={() => {
+            setLoading(true);
+            setActiveError('');
             if (month === 12) { setMonth(1); setYear(y => y + 1); }
             else setMonth(m => m + 1);
           }}>▶</button>
@@ -374,9 +437,14 @@ export default function ReportPage() {
   };
 
   const renderYearly = () => {
-    if (!yearlyData) return null;
+    if (!yearlyData) {
+      return <div className="empty-state"><p>这一年的报表暂时不可用</p></div>;
+    }
 
     const months = yearlyData.months || yearlyData; // 兼容旧数据格式
+    if (!Array.isArray(months) || months.length === 0) {
+      return <div className="empty-state"><p>这一年还没有数据哦~</p></div>;
+    }
     const data = {
       labels: months.map((d) => d.label),
       datasets: [
@@ -400,14 +468,20 @@ export default function ReportPage() {
     const totalIncome = months.reduce((s, d) => s + d.income, 0);
     const totalExpense = months.reduce((s, d) => s + d.expense, 0);
     const avgMonthlyExpense = totalExpense / 12;
-    const avgMonthlyIncome = totalIncome / 12;
-
     return (
       <div className="animate-fade-in">
         <div className="period-nav">
-          <button onClick={() => setYear((y) => y - 1)}>◀</button>
+          <button onClick={() => {
+            setLoading(true);
+            setActiveError('');
+            setYear((y) => y - 1);
+          }}>◀</button>
           <span className="period-label">{year}年</span>
-          <button onClick={() => setYear((y) => y + 1)}>▶</button>
+          <button onClick={() => {
+            setLoading(true);
+            setActiveError('');
+            setYear((y) => y + 1);
+          }}>▶</button>
         </div>
 
         <div className="report-summary section-gap">
@@ -486,7 +560,11 @@ export default function ReportPage() {
           <button
             key={t.key}
             className={`report-tab ${tab === t.key ? 'active' : ''}`}
-            onClick={() => setTab(t.key)}
+            onClick={() => {
+              setLoading(true);
+              setActiveError('');
+              setTab(t.key);
+            }}
             id={`tab-${t.key}`}
           >
             {t.label}
@@ -497,6 +575,10 @@ export default function ReportPage() {
       {/* 图表内容 */}
       {loading ? (
         <div className="loading-state">加载中...</div>
+      ) : activeError ? (
+        <div className="empty-state">
+          <p>{activeError}</p>
+        </div>
       ) : (
         <>
           {tab === 'weekly' && renderWeekly()}

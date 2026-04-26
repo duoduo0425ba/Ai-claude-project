@@ -1,5 +1,5 @@
 export default function TransactionCard({ transaction, onDelete, onEdit }) {
-  const { id, type, amount, category, emoji, note, date } = transaction;
+  const { id, type, amount, category, emoji, note } = transaction;
 
   return (
     <div className="transaction-card">

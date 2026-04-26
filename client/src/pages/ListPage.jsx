@@ -1,23 +1,18 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { getTransactions, deleteTransaction, batchImport } from '../api';
+import { useState, useEffect, useRef } from 'react';
+import { getTransactions, deleteTransaction, batchImport, getCategories } from '../api';
 import { importFromExcel, exportToExcel } from '../utils/excel';
 import TransactionCard from '../components/TransactionCard';
 import EditTransactionForm from '../components/EditTransactionForm';
 import ToastContainer from '../components/ToastContainer';
 import { useToast } from '../hooks/useToast';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../components/CategoryPicker';
-
-const ALL_CATEGORIES = [
-  { name: '全部', emoji: '🌈' },
-  ...EXPENSE_CATEGORIES,
-  ...INCOME_CATEGORIES,
-];
+import { formatLocalDate } from '../utils/date';
 
 const ITEMS_PER_PAGE = 30;
 
 export default function ListPage() {
   const [transactions, setTransactions] = useState([]);
+  const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [filterCategory, setFilterCategory] = useLocalStorage('listPageCategory', '全部');
   const [startDate, setStartDate] = useState('');
@@ -28,40 +23,79 @@ export default function ListPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const abortControllerRef = useRef(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [categoryOptions, setCategoryOptions] = useState([{ name: '全部', emoji: '🌈' }]);
   const { toasts, showToast } = useToast();
 
-  const loadData = useCallback(async () => {
-    try {
-      // 取消前一个请求
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+  const refresh = () => setRefreshKey((k) => k + 1);
 
-      // 创建新的 AbortController
-      abortControllerRef.current = new AbortController();
+  // 服务端分页数据拉取
+  useEffect(() => {
+    const controller = new AbortController();
 
+    const fetchData = async () => {
       setLoading(true);
-      const params = {};
-      if (filterCategory !== '全部') params.category = filterCategory;
-      if (keyword) params.keyword = keyword;
-      if (startDate) params.startDate = startDate;
-      if (endDate) params.endDate = endDate;
-      const res = await getTransactions(params);
-      setTransactions(res.data);
-      setCurrentPage(1);
-    } catch (err) {
-      if (err.name !== 'AbortError') {
-        showToast(err.message, 'error');
+      try {
+        const params = { page: currentPage, pageSize: ITEMS_PER_PAGE };
+        if (filterCategory !== '全部') params.category = filterCategory;
+        if (keyword) params.keyword = keyword;
+        if (startDate) params.startDate = startDate;
+        if (endDate) params.endDate = endDate;
+
+        const res = await getTransactions(params, { signal: controller.signal });
+        setTransactions(res.data);
+        setTotal(res.total ?? 0);
+      } catch (err) {
+        if (err.name !== 'AbortError') showToast(err.message, 'error');
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
+    };
+
+    fetchData();
+    return () => controller.abort();
+  }, [currentPage, filterCategory, keyword, startDate, endDate, refreshKey, showToast]);
+
+  // 筛选条件变更时回到第一页
+  const prevFilters = useRef({ filterCategory, keyword, startDate, endDate });
+  useEffect(() => {
+    const p = prevFilters.current;
+    if (p.filterCategory !== filterCategory || p.keyword !== keyword ||
+        p.startDate !== startDate || p.endDate !== endDate) {
+      prevFilters.current = { filterCategory, keyword, startDate, endDate };
+      setCurrentPage(1);
     }
-  }, [filterCategory, keyword, startDate, endDate, showToast]);
+  }, [filterCategory, keyword, startDate, endDate]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    let isMounted = true;
+
+    Promise.all([getCategories('expense'), getCategories('income')])
+      .then(([expenseRes, incomeRes]) => {
+        if (!isMounted) return;
+
+        const merged = [{ name: '全部', emoji: '🌈' }];
+        const seen = new Set(['全部']);
+
+        [...expenseRes.data, ...incomeRes.data].forEach((cat) => {
+          if (!seen.has(cat.name)) {
+            seen.add(cat.name);
+            merged.push({ name: cat.name, emoji: cat.emoji });
+          }
+        });
+
+        setCategoryOptions(merged);
+      })
+      .catch(() => {
+        if (isMounted) {
+          setCategoryOptions([{ name: '全部', emoji: '🌈' }]);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // 快捷键支持 (Escape 关闭弹窗)
   useEffect(() => {
@@ -85,7 +119,7 @@ export default function ListPage() {
     if (type === 'success') {
       setShowEditModal(false);
       setEditingTransaction(null);
-      loadData();
+      refresh();
     }
   };
 
@@ -94,7 +128,7 @@ export default function ListPage() {
     try {
       await deleteTransaction(id);
       showToast('删除成功 🗑️');
-      loadData();
+      refresh();
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -111,20 +145,31 @@ export default function ListPage() {
       }
       const res = await batchImport(records);
       showToast(`成功导入 ${res.imported} 条记录 🎉`);
-      loadData();
+      refresh();
     } catch (err) {
       showToast(err.message, 'error');
     }
     e.target.value = '';
   };
 
-  const handleExport = () => {
-    if (transactions.length === 0) {
-      showToast('没有数据可以导出 😅', 'warn');
-      return;
+  // 导出时拉全量数据（不分页）
+  const handleExport = async () => {
+    try {
+      const params = {};
+      if (filterCategory !== '全部') params.category = filterCategory;
+      if (keyword) params.keyword = keyword;
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+      const res = await getTransactions(params);
+      if (!res.data.length) {
+        showToast('没有数据可以导出 😅', 'warn');
+        return;
+      }
+      exportToExcel(res.data);
+      showToast('导出成功 📥');
+    } catch (err) {
+      showToast(err.message, 'error');
     }
-    exportToExcel(transactions);
-    showToast('导出成功 📥');
   };
 
   const handleAddBalance = async () => {
@@ -140,24 +185,25 @@ export default function ListPage() {
         category: '前期结余',
         emoji: '📦',
         note: '手动填入前期结余',
-        date: new Date().toISOString().slice(0, 10),
+        date: formatLocalDate(),
       }]);
       showToast('结余已添加 ✨');
       setShowBalanceModal(false);
       setInitialBalance('');
-      loadData();
+      refresh();
     } catch (err) {
       showToast(err.message, 'error');
     }
   };
 
-  // 按日期分组
+  // 按日期分组（server 已分页，直接用 transactions）
   const grouped = {};
   transactions.forEach((t) => {
     if (!grouped[t.date]) grouped[t.date] = [];
     grouped[t.date].push(t);
   });
   const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+  const totalPages = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
 
   return (
     <div className="page">
@@ -220,7 +266,7 @@ export default function ListPage() {
 
       {/* 分类筛选 */}
       <div className="filter-row section-gap">
-        {ALL_CATEGORIES.map((cat) => (
+        {categoryOptions.map((cat) => (
           <button
             key={cat.name}
             className={`filter-chip ${filterCategory === cat.name ? 'active' : ''}`}
@@ -273,7 +319,7 @@ export default function ListPage() {
         </div>
       ) : (
         <>
-          {sortedDates.slice((currentPage - 1) * ITEMS_PER_PAGE / (sortedDates.length), currentPage * ITEMS_PER_PAGE / (sortedDates.length)).map((date) => {
+          {sortedDates.map((date) => {
             const items = grouped[date];
             const dayIncome = items.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
             const dayExpense = items.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
@@ -287,7 +333,7 @@ export default function ListPage() {
                   </span>
                 </div>
                 <div className="transaction-list">
-                  {items.slice(0, ITEMS_PER_PAGE).map((t, i) => (
+                  {items.map((t, i) => (
                     <TransactionCard
                       key={t.id}
                       transaction={t}
@@ -302,7 +348,7 @@ export default function ListPage() {
           })}
 
           {/* 分页 */}
-          {transactions.length > ITEMS_PER_PAGE && (
+          {total > ITEMS_PER_PAGE && (
             <div className="pagination">
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
@@ -311,11 +357,11 @@ export default function ListPage() {
                 ◀ 上一页
               </button>
               <span className="pagination-info">
-                {currentPage} / {Math.ceil(transactions.length / ITEMS_PER_PAGE)}
+                {currentPage} / {totalPages}
               </span>
               <button
                 onClick={() => setCurrentPage((p) => p + 1)}
-                disabled={currentPage >= Math.ceil(transactions.length / ITEMS_PER_PAGE)}
+                disabled={currentPage >= totalPages}
               >
                 下一页 ▶
               </button>

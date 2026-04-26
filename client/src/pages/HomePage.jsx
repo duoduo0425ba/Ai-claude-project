@@ -1,15 +1,29 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import BudgetAlert from '../components/BudgetAlert';
 import TransactionForm from '../components/TransactionForm';
 import DailySummary from '../components/DailySummary';
 import BalanceSummary from '../components/BalanceSummary';
 import ToastContainer from '../components/ToastContainer';
 import { useToast } from '../hooks/useToast';
+import { formatLocalDate } from '../utils/date';
+import { generateRecurring } from '../api';
 
 export default function HomePage() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = formatLocalDate();
   const [refreshKey, setRefreshKey] = useState(0);
   const { toasts, showToast } = useToast();
+
+  // 每次打开首页时检查并生成到期的周期账单
+  useEffect(() => {
+    generateRecurring()
+      .then((res) => {
+        if (res.generated > 0) {
+          showToast(`已自动生成 ${res.generated} 条周期账单 🔄`);
+          setRefreshKey((k) => k + 1);
+        }
+      })
+      .catch(() => {}); // 静默失败，不影响主流程
+  }, [showToast]);
 
   const handleSuccess = useCallback((msg, type) => {
     showToast(msg, type);
