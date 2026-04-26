@@ -1,172 +1,112 @@
 # CLAUDE.md
 
-Guidance for developers working on **零花钱记账** with Claude Code or other AI assistants.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## 项目概述
 
-**零花钱记账** (Pocket Money Tracker) — A full-featured React + Express personal finance tracking app with:
-- 📱 Responsive UI with dark mode support
-- 📊 Rich data visualization (charts, stats, trends)
-- 💾 Excel import/export functionality
-- ⚙️ Customizable categories and budget tracking
-- 📦 Packagable as macOS `.app` via `build_app.sh`
+**零花钱记账** — React 19 + Express 5 + SQLite 个人记账应用，支持多用户 JWT 鉴权、自定义分类、周期账单、分类级预算和深色模式。
 
-## Quick Start
+## 常用命令
 
 ```bash
-npm run dev          # Start both server (port 5001) + client (port 5173)
-npm run server       # Backend only
-npm run client       # Frontend only
-npm run build        # Build for production
+# 根目录 — 同时启动服务端（5001）和客户端（5173）
+npm run dev
+npm run build          # 仅构建前端（生产模式）
+
+# 后端测试（Jest + Supertest，内存 SQLite）
+cd server && npm test
+cd server && npm test -- --testPathPatterns=tests/transactions
+
+# 前端测试（Vitest）
+cd client && npm test
+
+# 前端代码检查
+cd client && npm run lint
 ```
 
-## Architecture
+## 架构
 
-### Frontend (`client/`) — React 19 + Vite
+### 鉴权流程
 
-**Pages (4):**
-- `/` — **HomePage**: Quick transaction entry, daily summary, total balance, budget alert
-- `/list` — **ListPage**: Transaction history with search, filtering, pagination, edit/delete
-- `/report` — **ReportPage**: Charts (weekly/monthly/yearly), category breakdown, statistics
-- `/settings` — **SettingsPage**: Budget config, initial balance, custom category management
+- 所有受保护路由需要 `Authorization: Bearer <token>`（JWT，7 天有效期）
+- Token 存储在 **`sessionStorage`**（关闭浏览器自动清除——有意为之）
+- `server/middleware/auth.js` 验证 Token，将 `{ userId, username, role }` 挂载到 `req.user`
+- `client/src/api/index.js` 自动注入 Token；401 响应时清除 Token 并跳转到 `/login`
+- `client/src/App.jsx` — `AuthLayout` 包裹所有路由，`/login` 和 `/register` 除外
 
-**Key Components:**
-- `CategoryPicker.jsx` — Loads categories from API (fallback to hardcoded defaults)
-- `TransactionForm.jsx` & `EditTransactionForm.jsx` — Transaction CRUD
-- `DailySummary.jsx` & `BalanceSummary.jsx` — Daily & cumulative balance display
-- `BudgetAlert.jsx` — Monthly expense status with warn/danger thresholds
-- `ToastContainer.jsx` — Global toast notifications
+### 数据库迁移机制
 
-**Features:**
-- Dark mode: responds to `@media (prefers-color-scheme: dark)`
-- Smart empty states: distinguishes "no data" vs "no results" (after filtering)
-- Client-side pagination: 30 items/page with prev/next buttons
-- Local storage: remembers category filter preference
-- Request deduplication: AbortController prevents race conditions
-- Keyboard shortcuts: Escape closes modals
+- `server/migrate.js` 在每次启动时运行，按序执行 `server/migrations/NNN_*.js`
+- 已执行版本记录在 `schema_migrations` 表中
+- 添加 Schema 变更：新建 `server/migrations/003_*.js`，导出 `up(db)` 函数
+- `db.js` 仅负责打开连接并调用 `runMigrations`
+- `seedDefaults(db, userId)`（从 `001_initial_schema.js` 导出）为新用户初始化默认设置和分类，在注册时调用
 
-**Styling:**
-- Design tokens (CSS custom properties) with pastel sakura/lavender/mint colors
-- Glass-morphism cards, smooth animations
-- Fully responsive layout
+### 后端（`server/`）— Express 5 + SQLite（better-sqlite3）
 
-**API Layer (`src/api/index.js`):**
-All requests proxied via Vite dev proxy to `http://localhost:5001`:
-- Transactions: `getTransactions`, `addTransaction`, `updateTransaction`, `deleteTransaction`, `batchImport`
-- Stats: `getDailySummary`, `getWeeklyStats`, `getMonthlyStats`, `getYearlyStats`, `getBudgetStatus`, `getTotalBalance`
-- Categories: `getCategories`, `addCategory`, `deleteCategory`
-- Settings: `getSettings`, `updateSettings`
+**路由：**
 
-### Backend (`server/`) — Express 5 + SQLite
+| 路由文件 | 挂载路径 | 说明 |
+|--------|-------|-------|
+| `routes/auth.js` | `/api/auth` | 公开 — 注册、登录、改密、管理员用户 CRUD |
+| `routes/transactions.js` | `/api/transactions` | 受保护 — 交易 CRUD + 统计（日/周/月/年/预算/余额）+ 设置 |
+| `routes/categories.js` | `/api/categories` | 受保护 — 列表、添加、删除（`is_default=1` 的默认分类不可删除） |
+| `routes/recurring.js` | `/api/recurring` | 受保护 — 周期模板 CRUD + `/generate`（幂等，首页加载时调用） |
+| `routes/budgets.js` | `/api/budgets` | 受保护 — 分类月度预算 CRUD + `/status` |
 
-**Database Schema:**
-- `transactions` — type (income/expense), amount, category, emoji, note, date
-- `settings` — key-value pairs (monthly_income, warn_threshold, danger_threshold, initial_balance)
-- `categories` — type, name, emoji, is_default (0 for custom, 1 for seeded)
+**所有查询均按 `req.user.userId` 过滤**——数据完全按用户隔离。
 
-**Routers:**
-- `routes/transactions.js` — CRUD operations and stats aggregation
-- `routes/categories.js` — Category CRUD (add/delete only for custom categories)
+**Zod v4 校验**用于交易的 POST/PUT。注意：Zod v4 使用 `.issues` 而非 `.errors`。
 
-**API Endpoints:**
+**响应格式：** `{ success: true, data: ... }` / `{ success: false, error: "..." }`
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET/POST | `/api/transactions` | List (with filters) / Create |
-| PUT/DELETE | `/api/transactions/:id` | Update / Delete |
-| POST | `/api/transactions/batch` | Bulk import |
-| GET | `/api/transactions/stats/daily` | Daily summary (income, expense, balance, records) |
-| GET | `/api/transactions/stats/weekly` | 7-day breakdown |
-| GET | `/api/transactions/stats/monthly` | Monthly trends + category breakdown (expense & income) |
-| GET | `/api/transactions/stats/yearly` | Annual summary + top 8 categories (expense & income) |
-| GET | `/api/transactions/stats/budget` | Monthly budget status (progress, warn/danger levels) |
-| GET | `/api/transactions/stats/balance` | Cumulative balance (initial + all income - all expense) |
-| GET/POST/DELETE | `/api/categories` | Category management |
-| GET/PUT | `/api/transactions/settings` | App settings |
+### 前端（`client/src/`）— React 19 + Vite + React Router v7
 
-**Database Initialization:**
-- `db.js` creates tables and seeds 13 default categories (8 expense + 5 income)
-- Uses `INSERT OR IGNORE` to prevent duplicates
-- SQLite WAL mode enabled for concurrency
+**页面：**
+- `/` **HomePage** — 记账入口、日汇总、余额、BudgetAlert（全局 + 分类预算）
+- `/list` **ListPage** — 服务端分页历史记录，支持搜索/筛选/编辑/删除
+- `/report` **ReportPage** — Chart.js 图表（周/月/年）、分类明细
+- `/settings` **SettingsPage** — 预算配置、分类预算、分类管理、周期账单、数据备份/恢复、主题、账号安全、管理员用户面板
 
-**Response Format:**
-```json
-{ "success": true, "data": { ... } }
-{ "success": false, "error": "message" }
-```
+**关键模式：**
+- `refreshKey` 状态模式 — 自增触发 `useEffect` 重新拉取数据
+- `useEffect` cleanup 中的 `AbortController` — 防止快速切换筛选条件时的竞态问题
+- 服务端分页 — `GET /api/transactions?page=N&pageSize=30` 返回 `{ data, total }`
+- 主题：在 `main.jsx` 中 React 渲染前读取 `localStorage.getItem('theme')` 并设置 `data-theme` attribute，避免首屏闪烁。深色模式选择器：`html[data-theme="dark"]` 和 `@media (prefers-color-scheme: dark)` 内的 `html:not([data-theme="light"])`
+- 周期账单在首页加载时自动调用 `generateRecurring()`——该接口幂等（跳过已生成的条目）
 
-## Recent Improvements (v2.0)
+**样式：** `index.css` 中的 CSS 自定义属性，无 CSS-in-JS，所有主题通过 `var(--token-name)` 实现。
 
-✅ **Custom Categories** — Add/remove categories beyond defaults  
-✅ **Income Category Charts** — Monthly report shows income breakdown  
-✅ **Yearly Category Rankings** — Top 8 expense/income categories  
-✅ **Total Balance Widget** — Cumulative balance on homepage  
-✅ **Dark Mode** — System preference-aware styling  
-✅ **Pagination** — 30 transactions per page with navigation  
-✅ **Loading States** — Visual feedback during data fetch  
-✅ **Smart Empty States** — Context-aware "no data" vs "no results"  
-✅ **Request Deduplication** — AbortController prevents API race conditions  
-✅ **Keyboard Shortcuts** — Escape closes modals  
-✅ **Local Storage** — Remembers last filter selection  
-✅ **Enhanced Export** — Export by current period (week/month/year)  
-✅ **Category API** — Get/add/delete categories dynamically  
+**数字输入框：** 使用 `type="text" inputMode="decimal"`（而非 `type="number"`），避免浏览器拒绝 `"01"` 等中间状态。
 
-## Development Notes
-
-### Patterns & Conventions
-
-1. **State Management**: Local `useState` + `useLocalStorage` for preferences, no global store
-2. **Error Handling**: Toast notifications for user-facing errors, console logs for debugging
-3. **API Calls**: Always wrapped in try/catch with user feedback
-4. **Components**: Functional components with hooks; CategoryPicker uses API with hardcoded fallback
-5. **Styling**: CSS variables for theming, no CSS-in-JS
-
-### Common Tasks
-
-**Add a new report chart:**
-1. Extend `routes/transactions.js` stats endpoint if needed
-2. Add API function to `client/src/api/index.js`
-3. Render chart in `ReportPage.jsx` using Chart.js
-
-**Add a new setting:**
-1. Add field to SettingsPage form
-2. Backend automatically stores/retrieves via `GET|PUT /api/transactions/settings`
-
-**Custom categories workflow:**
-1. User adds via SettingsPage category management form
-2. `POST /api/categories` stores in DB with `is_default=0`
-3. CategoryPicker loads via `getCategories(type)` on next render
-4. User can delete via SettingsPage, triggers `DELETE /api/categories/:id`
-
-### File Organization
+### 文件结构
 
 ```
-client/src/
-├── pages/         # 4 route pages
-├── components/    # Reusable UI components
-├── hooks/         # Custom React hooks (useToast, useLocalStorage)
-├── utils/         # Excel import/export helpers
-├── api/           # API layer
-└── index.css      # Global styles + dark mode
-
 server/
-├── routes/        # Express routers (transactions, categories)
-├── db.js          # SQLite schema & initialization
-└── index.js       # Express app setup
+├── migrations/        # 001_initial_schema.js、002_category_budgets.js、…
+├── middleware/auth.js  # JWT 验证
+├── routes/            # auth、transactions、categories、recurring、budgets
+├── tests/             # Jest + Supertest（使用 DB_PATH=':memory:'）
+├── app.js             # Express app（供测试引入）
+├── index.js           # 仅 HTTP 监听
+├── migrate.js         # 迁移运行器
+└── db.js              # DB 连接 + 调用 runMigrations
+
+client/src/
+├── api/index.js       # 所有 API 调用、Token 注入、401 处理
+├── pages/             # 4 个路由页面 + LoginPage、RegisterPage
+├── components/        # BudgetAlert、CategoryPicker、ErrorBoundary 等
+├── hooks/             # useToast、useLocalStorage
+├── utils/             # date.js、Excel 导入导出、date.test.js
+└── index.css          # 设计 token + 深色模式
 ```
 
-## macOS App Packaging
+## 测试说明
 
-Run `build_app.sh` to create a `.app` bundle:
-- Compiles an AppleScript launcher
-- Starts Express server + opens browser automatically
-- Regenerates icon/launcher on each run
+后端测试在 `require('app.js')` **之前**设置 `process.env.DB_PATH = ':memory:'`。`beforeAll` 中注册测试用户，所有请求携带 `Authorization` Header。
 
-## Testing
+新增迁移不需要额外测试配置——迁移在内存 DB 上自动执行。
 
-No automated tests configured. Manual QA:
-- Start `npm run dev`
-- Visit http://localhost:5173
-- Test transaction CRUD, filtering, pagination, dark mode, category management
-- Verify charts render correctly with sample data
-- Check Excel import/export
+## macOS 打包
+
+`bash build_app.sh` — 将 AppleScript 启动器编译为 `.app` bundle，启动 Express 服务并自动打开浏览器。
