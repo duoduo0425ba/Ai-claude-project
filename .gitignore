@@ -16,3 +16,7 @@ server/data.db-wal
 
 PROJECT_PROMPT.md
 Reph_ByPy.md
+
+# 本地笔记与工具目录，不进版本库
+claude-code-tutorial.html
+.antigravitycli/
