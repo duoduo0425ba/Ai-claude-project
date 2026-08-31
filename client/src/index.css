@@ -740,6 +740,32 @@ body::before {
   border-color: var(--sakura-pink);
 }
 
+/* 按金额排序时不按日期分组，平铺展示并在每条上方标注日期 */
+.sorted-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sorted-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sorted-item-date {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  padding-left: 4px;
+}
+
+.sort-hint {
+  align-self: center;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
 /* ========== Report Tabs ========== */
 .report-tabs {
   display: flex;

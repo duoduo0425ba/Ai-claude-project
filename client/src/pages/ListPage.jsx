@@ -25,9 +25,14 @@ export default function ListPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
   const [categoryOptions, setCategoryOptions] = useState([{ name: '全部', emoji: '🌈' }]);
+  // null = 按日期（默认），'desc' = 金额从高到低，'asc' = 金额从低到高
+  const [amountSort, setAmountSort] = useState(null);
   const { toasts, showToast } = useToast();
 
   const refresh = () => setRefreshKey((k) => k + 1);
+
+  const toggleAmountSort = () =>
+    setAmountSort((s) => (s === null ? 'desc' : s === 'desc' ? 'asc' : null));
 
   // 服务端分页数据拉取
   useEffect(() => {
@@ -41,6 +46,7 @@ export default function ListPage() {
         if (keyword) params.keyword = keyword;
         if (startDate) params.startDate = startDate;
         if (endDate) params.endDate = endDate;
+        if (amountSort) { params.sort = 'amount'; params.order = amountSort; }
 
         const res = await getTransactions(params, { signal: controller.signal });
         setTransactions(res.data);
@@ -54,18 +60,18 @@ export default function ListPage() {
 
     fetchData();
     return () => controller.abort();
-  }, [currentPage, filterCategory, keyword, startDate, endDate, refreshKey, showToast]);
+  }, [currentPage, filterCategory, keyword, startDate, endDate, amountSort, refreshKey, showToast]);
 
-  // 筛选条件变更时回到第一页
-  const prevFilters = useRef({ filterCategory, keyword, startDate, endDate });
+  // 筛选或排序变更时回到第一页
+  const prevFilters = useRef({ filterCategory, keyword, startDate, endDate, amountSort });
   useEffect(() => {
     const p = prevFilters.current;
     if (p.filterCategory !== filterCategory || p.keyword !== keyword ||
-        p.startDate !== startDate || p.endDate !== endDate) {
-      prevFilters.current = { filterCategory, keyword, startDate, endDate };
+        p.startDate !== startDate || p.endDate !== endDate || p.amountSort !== amountSort) {
+      prevFilters.current = { filterCategory, keyword, startDate, endDate, amountSort };
       setCurrentPage(1);
     }
-  }, [filterCategory, keyword, startDate, endDate]);
+  }, [filterCategory, keyword, startDate, endDate, amountSort]);
 
   useEffect(() => {
     let isMounted = true;
@@ -277,6 +283,20 @@ export default function ListPage() {
         ))}
       </div>
 
+      {/* 排序 */}
+      <div className="filter-row section-gap">
+        <button
+          className={`filter-chip ${amountSort ? 'active' : ''}`}
+          onClick={toggleAmountSort}
+          id="btn-sort-amount"
+        >
+          {amountSort === 'desc' ? '💰 金额 ↓ 从高到低'
+            : amountSort === 'asc' ? '💰 金额 ↑ 从低到高'
+            : '💰 按金额排序'}
+        </button>
+        {amountSort && <span className="sort-hint">再点一次回到按日期排列</span>}
+      </div>
+
       {/* 操作栏 */}
       <div className="action-bar section-gap">
         <div className="file-input-wrapper">
@@ -319,33 +339,48 @@ export default function ListPage() {
         </div>
       ) : (
         <>
-          {sortedDates.map((date) => {
-            const items = grouped[date];
-            const dayIncome = items.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-            const dayExpense = items.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+          {amountSort ? (
+            <div className="sorted-list">
+              {transactions.map((t) => (
+                <div key={t.id} className="sorted-item">
+                  <span className="sorted-item-date">{t.date}</span>
+                  <TransactionCard
+                    transaction={t}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            sortedDates.map((date) => {
+              const items = grouped[date];
+              const dayIncome = items.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+              const dayExpense = items.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
 
-            return (
-              <div key={date} className="date-group">
-                <div className="date-group-header">
-                  <span className="date-label">{date}</span>
-                  <span className="date-total">
-                    收 +¥{dayIncome.toFixed(2)} &nbsp; 支 -¥{dayExpense.toFixed(2)}
-                  </span>
+              return (
+                <div key={date} className="date-group">
+                  <div className="date-group-header">
+                    <span className="date-label">{date}</span>
+                    <span className="date-total">
+                      收 +¥{dayIncome.toFixed(2)} &nbsp; 支 -¥{dayExpense.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="transaction-list">
+                    {items.map((t, i) => (
+                      <TransactionCard
+                        key={t.id}
+                        transaction={t}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                        style={{ animationDelay: `${i * 0.05}s` }}
+                      />
+                    ))}
+                  </div>
                 </div>
-                <div className="transaction-list">
-                  {items.map((t, i) => (
-                    <TransactionCard
-                      key={t.id}
-                      transaction={t}
-                      onEdit={handleEdit}
-                      onDelete={handleDelete}
-                      style={{ animationDelay: `${i * 0.05}s` }}
-                    />
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
 
           {/* 分页 */}
           {total > ITEMS_PER_PAGE && (

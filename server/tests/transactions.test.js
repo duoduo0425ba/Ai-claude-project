@@ -86,6 +86,55 @@ describe('GET /api/transactions 分页', () => {
   });
 });
 
+// ─── 排序 ────────────────────────────────────────────────────────────────────
+
+describe('GET /api/transactions 排序', () => {
+  beforeEach(async () => {
+    // 金额与日期顺序相反，用来区分两种排序
+    const rows = [
+      { amount: 30, date: '2026-04-01' },
+      { amount: 10, date: '2026-04-02' },
+      { amount: 50, date: '2026-04-03' },
+      { amount: 20, date: '2026-04-04' },
+    ];
+    for (const r of rows) {
+      await request(app).post('/api/transactions').set(auth)
+        .send({ type: 'expense', category: '测试', ...r });
+    }
+  });
+
+  it('默认按日期倒序', async () => {
+    const res = await request(app).get('/api/transactions').set(auth);
+    expect(res.body.data.map((t) => t.date))
+      .toEqual(['2026-04-04', '2026-04-03', '2026-04-02', '2026-04-01']);
+  });
+
+  it('金额降序', async () => {
+    const res = await request(app).get('/api/transactions?sort=amount&order=desc').set(auth);
+    expect(res.body.data.map((t) => t.amount)).toEqual([50, 30, 20, 10]);
+  });
+
+  it('金额升序', async () => {
+    const res = await request(app).get('/api/transactions?sort=amount&order=asc').set(auth);
+    expect(res.body.data.map((t) => t.amount)).toEqual([10, 20, 30, 50]);
+  });
+
+  it('金额排序跨分页仍然正确', async () => {
+    const res = await request(app)
+      .get('/api/transactions?sort=amount&order=desc&page=1&pageSize=2').set(auth);
+    expect(res.body.data.map((t) => t.amount)).toEqual([50, 30]);
+    expect(res.body.total).toBe(4);
+  });
+
+  it('非法 sort 值回退到默认排序', async () => {
+    const res = await request(app)
+      .get('/api/transactions?sort=amount;DROP TABLE transactions&order=x').set(auth);
+    expect(res.status).toBe(200);
+    expect(res.body.data.map((t) => t.date))
+      .toEqual(['2026-04-04', '2026-04-03', '2026-04-02', '2026-04-01']);
+  });
+});
+
 // ─── 当日摘要 ──────────────────────────────────────────────────────────────────
 
 describe('GET /api/transactions/stats/daily', () => {

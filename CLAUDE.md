@@ -50,6 +50,7 @@ cd client && npm run lint
 |--------|-------|-------|
 | `routes/auth.js` | `/api/auth` | 公开 — 注册、登录、改密、管理员用户 CRUD |
 | `routes/transactions.js` | `/api/transactions` | 受保护 — 交易 CRUD + 统计（日/周/月/年/预算/余额）+ 设置 |
+| ↳ `GET /` 查询参数 | | `startDate`、`endDate`、`category`、`type`、`keyword`、`page`、`pageSize`、`sort`、`order` |
 | `routes/categories.js` | `/api/categories` | 受保护 — 列表、添加、删除（`is_default=1` 的默认分类不可删除） |
 | `routes/recurring.js` | `/api/recurring` | 受保护 — 周期模板 CRUD + `/generate`（幂等，首页加载时调用） |
 | `routes/budgets.js` | `/api/budgets` | 受保护 — 分类月度预算 CRUD + `/status` |
@@ -58,13 +59,15 @@ cd client && npm run lint
 
 **Zod v4 校验**用于交易的 POST/PUT。注意：Zod v4 使用 `.issues` 而非 `.errors`。
 
+**排序（`GET /api/transactions`）：** `sort=amount` 按金额排，其余值一律回退到按日期；`order=asc` 升序，其余回退降序。列名和方向都走白名单后再拼进 `ORDER BY`，绝不能直接插用户输入。不传参数时与历史行为完全一致（`date DESC, created_at DESC`）。
+
 **响应格式：** `{ success: true, data: ... }` / `{ success: false, error: "..." }`
 
 ### 前端（`client/src/`）— React 19 + Vite + React Router v7
 
 **页面：**
 - `/` **HomePage** — 记账入口、日汇总、余额、BudgetAlert（全局 + 分类预算）
-- `/list` **ListPage** — 服务端分页历史记录，支持搜索/筛选/编辑/删除
+- `/list` **ListPage** — 服务端分页历史记录，支持搜索/筛选/排序/编辑/删除
 - `/report` **ReportPage** — Chart.js 图表（周/月/年）、分类明细
 - `/settings` **SettingsPage** — 预算配置、分类预算、分类管理、周期账单、数据备份/恢复、主题、账号安全、管理员用户面板
 
@@ -72,6 +75,9 @@ cd client && npm run lint
 - `refreshKey` 状态模式 — 自增触发 `useEffect` 重新拉取数据
 - `useEffect` cleanup 中的 `AbortController` — 防止快速切换筛选条件时的竞态问题
 - 服务端分页 — `GET /api/transactions?page=N&pageSize=30` 返回 `{ data, total }`
+- **排序必须走服务端。** 列表是分页的，前端只持有当前 30 条；对 `transactions` 数组本地排序得到的是「这一页里最大的」而非「全部记录里最大的」——看着能用，结果是错的。ListPage 的金额排序把 `sort`/`order` 传给后端，三态循环：`null`（按日期）→ `'desc'` → `'asc'` → `null`
+- 按金额排序时**关闭日期分组**，改用 `.sorted-list` 平铺、每条上方标注日期。否则金额顺序会打乱日期，分组头出现「08-03 / 08-01 / 08-03」这类反复跳动
+- 排序或筛选条件变更时通过 `prevFilters` ref 重置到第 1 页（新条件下停留在第 N 页没有意义）
 - 主题：在 `main.jsx` 中 React 渲染前读取 `localStorage.getItem('theme')` 并设置 `data-theme` attribute，避免首屏闪烁。深色模式选择器：`html[data-theme="dark"]` 和 `@media (prefers-color-scheme: dark)` 内的 `html:not([data-theme="light"])`
 - 周期账单在首页加载时自动调用 `generateRecurring()`——该接口幂等（跳过已生成的条目）
 

@@ -53,7 +53,7 @@ router.put('/settings', (req, res) => {
 
 router.get('/', (req, res) => {
   try {
-    const { startDate, endDate, category, keyword, type, page, pageSize } = req.query;
+    const { startDate, endDate, category, keyword, type, page, pageSize, sort, order } = req.query;
     const userId = req.user.userId;
     let where = 'WHERE user_id = ?';
     const params = [userId];
@@ -70,7 +70,13 @@ router.get('/', (req, res) => {
     const total = db.prepare(`SELECT COUNT(*) as cnt FROM transactions ${where}`)
       .get(...params).cnt;
 
-    let sql = `SELECT * FROM transactions ${where} ORDER BY date DESC, created_at DESC`;
+    // 排序列走白名单，不能直接拼接用户输入
+    const dir = order === 'asc' ? 'ASC' : 'DESC';
+    const orderBy = sort === 'amount'
+      ? `amount ${dir}, date DESC, created_at DESC`
+      : `date ${dir}, created_at ${dir}`;
+
+    let sql = `SELECT * FROM transactions ${where} ORDER BY ${orderBy}`;
     if (page !== undefined) {
       const limit = Math.min(Math.max(parseInt(pageSize) || 30, 1), 100);
       const offset = (Math.max(parseInt(page), 1) - 1) * limit;
