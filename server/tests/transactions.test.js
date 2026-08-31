@@ -159,6 +159,162 @@ describe('GET /api/transactions/stats/daily', () => {
   });
 });
 
+// ─── 周汇总 ───────────────────────────────────────────────────────────────────
+
+// 2026-04-20 是周一，2026-04-26 是周日，属于同一周
+describe('GET /api/transactions/stats/weekly', () => {
+  beforeEach(async () => {
+    const add = (t) => request(app).post('/api/transactions').set(auth).send(t);
+    await add({ type: 'income',  amount: 100, category: '零花钱', date: '2026-04-20' }); // 周一
+    await add({ type: 'expense', amount: 30,  category: '餐饮',   date: '2026-04-20' }); // 周一
+    await add({ type: 'expense', amount: 12,  category: '餐饮',   date: '2026-04-20' }); // 周一，同日同类型
+    await add({ type: 'expense', amount: 8,   category: '零食',   date: '2026-04-22' }); // 周三
+    await add({ type: 'expense', amount: 99,  category: '娱乐',   date: '2026-04-27' }); // 下周一，不应计入
+  });
+
+  it('返回周一到周日 7 天，日期和标签对齐', async () => {
+    const res = await request(app).get('/api/transactions/stats/weekly?date=2026-04-22').set(auth);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(7);
+    expect(res.body.data[0]).toMatchObject({ date: '2026-04-20', dayLabel: '周一' });
+    expect(res.body.data[6]).toMatchObject({ date: '2026-04-26', dayLabel: '周日' });
+  });
+
+  it('同日同类型的多条记录被合计', async () => {
+    const res = await request(app).get('/api/transactions/stats/weekly?date=2026-04-22').set(auth);
+    expect(res.body.data[0].income).toBe(100);
+    expect(res.body.data[0].expense).toBe(42); // 30 + 12
+  });
+
+  it('没有记录的日子返回 0 而不是 null', async () => {
+    const res = await request(app).get('/api/transactions/stats/weekly?date=2026-04-22').set(auth);
+    expect(res.body.data[1]).toMatchObject({ date: '2026-04-21', income: 0, expense: 0 });
+    expect(res.body.data[2]).toMatchObject({ date: '2026-04-22', income: 0, expense: 8 });
+  });
+
+  it('传入周日时回退到本周一，不跨到下一周', async () => {
+    const res = await request(app).get('/api/transactions/stats/weekly?date=2026-04-26').set(auth);
+    expect(res.body.data[0].date).toBe('2026-04-20');
+    expect(res.body.data[6].date).toBe('2026-04-26');
+    // 2026-04-27 的 99 元属于下一周，本周总支出应为 30+12+8
+    const totalExpense = res.body.data.reduce((s, d) => s + d.expense, 0);
+    expect(totalExpense).toBe(50);
+  });
+
+  it('不统计其他用户的记录', async () => {
+    const reg = await request(app).post('/api/auth/register')
+      .send({ username: 'weeklyother', password: 'password123' });
+    const otherAuth = { Authorization: `Bearer ${reg.body.data.token}` };
+    await request(app).post('/api/transactions').set(otherAuth)
+      .send({ type: 'expense', amount: 500, category: '餐饮', date: '2026-04-20' });
+
+    const res = await request(app).get('/api/transactions/stats/weekly?date=2026-04-22').set(auth);
+    expect(res.body.data[0].expense).toBe(42); // 不含对方的 500
+  });
+});
+
+// ─── 月汇总 / 年汇总 ──────────────────────────────────────────────────────────
+
+describe('GET /api/transactions/stats/monthly 与 /stats/yearly', () => {
+  beforeEach(async () => {
+    const add = (t) => request(app).post('/api/transactions').set(auth).send(t);
+    await add({ type: 'income',  amount: 100, category: '零花钱', date: '2026-04-20' });
+    await add({ type: 'expense', amount: 30,  category: '餐饮',   date: '2026-04-20' });
+    await add({ type: 'expense', amount: 12,  category: '餐饮',   date: '2026-04-20' }); // 同日同类型
+    await add({ type: 'expense', amount: 50,  category: '娱乐',   date: '2026-04-22' });
+    await add({ type: 'expense', amount: 999, category: '餐饮',   date: '2026-03-31' }); // 上月
+    await add({ type: 'expense', amount: 888, category: '餐饮',   date: '2026-05-01' }); // 下月
+    await add({ type: 'expense', amount: 777, category: '餐饮',   date: '2025-12-31' }); // 上一年
+  });
+
+  const monthly = (q) => request(app).get(`/api/transactions/stats/monthly?${q}`).set(auth);
+  const yearly  = (q) => request(app).get(`/api/transactions/stats/yearly?${q}`).set(auth);
+
+  it('daily 覆盖当月每一天，空白日补 0', async () => {
+    const res = await monthly('year=2026&month=4');
+    expect(res.body.data.daily).toHaveLength(30);
+    expect(res.body.data.daily[19]).toMatchObject({ date: '2026-04-20', day: 20, income: 100, expense: 42 });
+    expect(res.body.data.daily[0]).toMatchObject({ date: '2026-04-01', income: 0, expense: 0 });
+  });
+
+  it('月份天数随月份变化（2026 年 2 月 28 天）', async () => {
+    const res = await monthly('year=2026&month=2');
+    expect(res.body.data.daily).toHaveLength(28);
+  });
+
+  it('月度总计只含本月，不含上月和下月', async () => {
+    const res = await monthly('year=2026&month=4');
+    expect(res.body.data.totalIncome).toBe(100);
+    expect(res.body.data.totalExpense).toBe(92); // 30 + 12 + 50
+    expect(res.body.data.balance).toBe(8);
+  });
+
+  it('无任何记录的月份返回 0 而不是 undefined', async () => {
+    const res = await monthly('year=2026&month=7');
+    expect(res.body.data.totalIncome).toBe(0);
+    expect(res.body.data.totalExpense).toBe(0);
+    expect(res.body.data.categories).toEqual([]);
+  });
+
+  it('月度分类排行按金额降序，收支分流正确', async () => {
+    const res = await monthly('year=2026&month=4');
+    expect(res.body.data.categories).toEqual([
+      { category: '娱乐', emoji: '', total: 50 },
+      { category: '餐饮', emoji: '', total: 42 },
+    ]);
+    expect(res.body.data.incomeCategories).toEqual([
+      { category: '零花钱', emoji: '', total: 100 },
+    ]);
+  });
+
+  it('yearly 返回 12 个月，空月补 0', async () => {
+    const res = await yearly('year=2026');
+    expect(res.body.data.months).toHaveLength(12);
+    expect(res.body.data.months[0]).toMatchObject({ month: 1, label: '1月', income: 0, expense: 0 });
+    expect(res.body.data.months[2]).toMatchObject({ month: 3, expense: 999 });
+    expect(res.body.data.months[3]).toMatchObject({ month: 4, income: 100, expense: 92 });
+    expect(res.body.data.months[4]).toMatchObject({ month: 5, expense: 888 });
+  });
+
+  it('yearly 不统计上一年的记录', async () => {
+    const res = await yearly('year=2026');
+    const totalExpense = res.body.data.months.reduce((s, m) => s + m.expense, 0);
+    expect(totalExpense).toBe(1979); // 999 + 92 + 888，不含 2025 年的 777
+  });
+
+  it('yearly 分类排行按金额降序', async () => {
+    const res = await yearly('year=2026');
+    expect(res.body.data.expenseCategories).toEqual([
+      { category: '餐饮', emoji: '', total: 1929 }, // 30+12+999+888
+      { category: '娱乐', emoji: '', total: 50 },
+    ]);
+    expect(res.body.data.incomeCategories).toEqual([
+      { category: '零花钱', emoji: '', total: 100 },
+    ]);
+  });
+
+  it('yearly 分类排行最多返回 8 条', async () => {
+    for (let i = 1; i <= 10; i++) {
+      await request(app).post('/api/transactions').set(auth)
+        .send({ type: 'expense', amount: i, category: `分类${i}`, date: '2026-06-15' });
+    }
+    const res = await yearly('year=2026');
+    expect(res.body.data.expenseCategories).toHaveLength(8);
+  });
+
+  it('不统计其他用户的记录', async () => {
+    const reg = await request(app).post('/api/auth/register')
+      .send({ username: 'monthlyother', password: 'password123' });
+    const otherAuth = { Authorization: `Bearer ${reg.body.data.token}` };
+    await request(app).post('/api/transactions').set(otherAuth)
+      .send({ type: 'expense', amount: 500, category: '餐饮', date: '2026-04-20' });
+
+    const res = await monthly('year=2026&month=4');
+    expect(res.body.data.totalExpense).toBe(92);
+    expect(res.body.data.daily[19].expense).toBe(42);
+  });
+});
+
 // ─── 预算状态 ──────────────────────────────────────────────────────────────────
 
 describe('GET /api/transactions/stats/budget', () => {

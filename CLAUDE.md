@@ -59,6 +59,8 @@ cd client && npm run lint
 
 **Zod v4 校验**用于交易的 POST/PUT。注意：Zod v4 使用 `.issues` 而非 `.errors`。
 
+**统计接口一律「一条 `GROUP BY` + JS 补零」**，不要退回按天/按月循环查询。先用循环排出完整的日期（或月份）骨架，再把 `GROUP BY` 的结果填进去——没有记录的日子不会出现在 SQL 结果里，靠骨架补 `0`。月度/年度总计仍单独走一条 SQL，避免按天累加 `REAL` 引入浮点尾差。
+
 **排序（`GET /api/transactions`）：** `sort=amount` 按金额排，其余值一律回退到按日期；`order=asc` 升序，其余回退降序。列名和方向都走白名单后再拼进 `ORDER BY`，绝不能直接插用户输入。不传参数时与历史行为完全一致（`date DESC, created_at DESC`）。
 
 **响应格式：** `{ success: true, data: ... }` / `{ success: false, error: "..." }`

@@ -206,15 +206,36 @@ router.get('/stats/weekly', (req, res) => {
     const monday = new Date(targetDate);
     monday.setDate(targetDate.getDate() - (dow === 0 ? 6 : dow - 1));
 
-    const days = [];
+    // 先排出本周 7 天的日期字符串，作为返回结果的骨架
+    const dates = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
-      const dateStr = formatLocalDate(d);
-      const income = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM transactions WHERE type='income' AND date=? AND user_id=?").get(dateStr, uid);
-      const expense = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM transactions WHERE type='expense' AND date=? AND user_id=?").get(dateStr, uid);
-      days.push({ date: dateStr, dayLabel: ['周一','周二','周三','周四','周五','周六','周日'][i], income: income.total, expense: expense.total });
+      dates.push(formatLocalDate(d));
     }
+
+    // 一条查询取回整周数据。没有记录的日子不会出现在结果里，靠下面的骨架补 0
+    const rows = db.prepare(`
+      SELECT date, type, SUM(amount) as total
+      FROM transactions
+      WHERE date >= ? AND date <= ? AND user_id = ?
+      GROUP BY date, type
+    `).all(dates[0], dates[6], uid);
+
+    const totals = {};
+    for (const r of rows) {
+      if (!totals[r.date]) totals[r.date] = { income: 0, expense: 0 };
+      totals[r.date][r.type] = r.total;
+    }
+
+    const dayLabels = ['周一','周二','周三','周四','周五','周六','周日'];
+    const days = dates.map((dateStr, i) => ({
+      date: dateStr,
+      dayLabel: dayLabels[i],
+      income: totals[dateStr]?.income ?? 0,
+      expense: totals[dateStr]?.expense ?? 0,
+    }));
+
     res.json({ success: true, data: days });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -230,30 +251,47 @@ router.get('/stats/monthly', (req, res) => {
     const monthStart = `${y}-${String(m).padStart(2,'0')}-01`;
     const monthEnd   = `${y}-${String(m).padStart(2,'0')}-${String(daysInMonth).padStart(2,'0')}`;
 
+    // 一条查询取回全月每天的收支，没有记录的日子不会出现，靠下面的骨架补 0
+    const byDate = {};
+    db.prepare(`
+      SELECT date, type, SUM(amount) as total
+      FROM transactions WHERE date>=? AND date<=? AND user_id=?
+      GROUP BY date, type
+    `).all(monthStart, monthEnd, uid).forEach(r => {
+      if (!byDate[r.date]) byDate[r.date] = { income: 0, expense: 0 };
+      byDate[r.date][r.type] = r.total;
+    });
+
     const daily = [];
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-      const inc = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM transactions WHERE type='income' AND date=? AND user_id=?").get(dateStr, uid);
-      const exp = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM transactions WHERE type='expense' AND date=? AND user_id=?").get(dateStr, uid);
-      daily.push({ date: dateStr, day: d, income: inc.total, expense: exp.total });
+      daily.push({
+        date: dateStr,
+        day: d,
+        income: byDate[dateStr]?.income ?? 0,
+        expense: byDate[dateStr]?.expense ?? 0,
+      });
     }
 
-    const categories = db.prepare(`
-      SELECT category, emoji, SUM(amount) as total
-      FROM transactions WHERE type='expense' AND date>=? AND date<=? AND user_id=?
-      GROUP BY category ORDER BY total DESC
+    // 收入和支出两侧的分类排行合并成一条查询，再按 type 分流
+    const categoryRows = db.prepare(`
+      SELECT type, category, emoji, SUM(amount) as total
+      FROM transactions WHERE date>=? AND date<=? AND user_id=?
+      GROUP BY type, category ORDER BY total DESC
     `).all(monthStart, monthEnd, uid);
+    const pickCategories = (t) => categoryRows
+      .filter(r => r.type === t)
+      .map(({ category, emoji, total }) => ({ category, emoji, total }));
 
-    const incomeCategories = db.prepare(`
-      SELECT category, emoji, SUM(amount) as total
-      FROM transactions WHERE type='income' AND date>=? AND date<=? AND user_id=?
-      GROUP BY category ORDER BY total DESC
-    `).all(monthStart, monthEnd, uid);
+    // 月度总计仍交给 SQL 一次算完，避免按天累加引入浮点尾差
+    const totals = { income: 0, expense: 0 };
+    db.prepare(`
+      SELECT type, SUM(amount) as total
+      FROM transactions WHERE date>=? AND date<=? AND user_id=?
+      GROUP BY type
+    `).all(monthStart, monthEnd, uid).forEach(r => { totals[r.type] = r.total; });
 
-    const totalIncome  = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM transactions WHERE type='income' AND date>=? AND date<=? AND user_id=?").get(monthStart, monthEnd, uid);
-    const totalExpense = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM transactions WHERE type='expense' AND date>=? AND date<=? AND user_id=?").get(monthStart, monthEnd, uid);
-
-    res.json({ success: true, data: { daily, categories, incomeCategories, totalIncome: totalIncome.total, totalExpense: totalExpense.total, balance: totalIncome.total - totalExpense.total } });
+    res.json({ success: true, data: { daily, categories: pickCategories('expense'), incomeCategories: pickCategories('income'), totalIncome: totals.income, totalExpense: totals.expense, balance: totals.income - totals.expense } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -266,28 +304,40 @@ router.get('/stats/yearly', (req, res) => {
     const yearStart = `${y}-01-01`;
     const yearEnd   = `${y}-12-31`;
 
+    // date 是 'YYYY-MM-DD' 文本，取前 7 位就是月份，一条查询按月聚合
+    const byMonth = {};
+    db.prepare(`
+      SELECT substr(date, 1, 7) as ym, type, SUM(amount) as total
+      FROM transactions WHERE date>=? AND date<=? AND user_id=?
+      GROUP BY ym, type
+    `).all(yearStart, yearEnd, uid).forEach(r => {
+      if (!byMonth[r.ym]) byMonth[r.ym] = { income: 0, expense: 0 };
+      byMonth[r.ym][r.type] = r.total;
+    });
+
     const months = [];
     for (let mo = 1; mo <= 12; mo++) {
-      const ms = `${y}-${String(mo).padStart(2,'0')}-01`;
-      const me = `${y}-${String(mo).padStart(2,'0')}-${String(new Date(y,mo,0).getDate()).padStart(2,'0')}`;
-      const inc = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM transactions WHERE type='income' AND date>=? AND date<=? AND user_id=?").get(ms, me, uid);
-      const exp = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM transactions WHERE type='expense' AND date>=? AND date<=? AND user_id=?").get(ms, me, uid);
-      months.push({ month: mo, label: `${mo}月`, income: inc.total, expense: exp.total });
+      const ym = `${y}-${String(mo).padStart(2,'0')}`;
+      months.push({
+        month: mo,
+        label: `${mo}月`,
+        income: byMonth[ym]?.income ?? 0,
+        expense: byMonth[ym]?.expense ?? 0,
+      });
     }
 
-    const expenseCategories = db.prepare(`
-      SELECT category, emoji, SUM(amount) as total
-      FROM transactions WHERE type='expense' AND date>=? AND date<=? AND user_id=?
-      GROUP BY category ORDER BY total DESC LIMIT 8
+    // 两侧分类排行合并成一条查询；整体已按 total 降序，分流后各自仍是降序，再各取前 8
+    const categoryRows = db.prepare(`
+      SELECT type, category, emoji, SUM(amount) as total
+      FROM transactions WHERE date>=? AND date<=? AND user_id=?
+      GROUP BY type, category ORDER BY total DESC
     `).all(yearStart, yearEnd, uid);
+    const top8 = (t) => categoryRows
+      .filter(r => r.type === t)
+      .slice(0, 8)
+      .map(({ category, emoji, total }) => ({ category, emoji, total }));
 
-    const incomeCategories = db.prepare(`
-      SELECT category, emoji, SUM(amount) as total
-      FROM transactions WHERE type='income' AND date>=? AND date<=? AND user_id=?
-      GROUP BY category ORDER BY total DESC LIMIT 8
-    `).all(yearStart, yearEnd, uid);
-
-    res.json({ success: true, data: { months, expenseCategories, incomeCategories } });
+    res.json({ success: true, data: { months, expenseCategories: top8('expense'), incomeCategories: top8('income') } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
