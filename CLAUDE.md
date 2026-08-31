@@ -57,7 +57,9 @@ cd client && npm run lint
 
 **所有查询均按 `req.user.userId` 过滤**——数据完全按用户隔离。
 
-**Zod v4 校验**用于交易的 POST/PUT。注意：Zod v4 使用 `.issues` 而非 `.errors`。
+**Zod v4 校验**用于交易的 POST/PUT/batch，共用同一个 `transactionSchema`。注意：Zod v4 使用 `.issues` 而非 `.errors`。
+
+**`POST /batch` 逐条校验、逐条跳过**，不因单行脏数据整批失败——批量导入的数据来自 Excel 和用户可手改的备份 JSON，整批拒绝体验太差。响应带 `imported`、`skippedCount` 和 `skipped` 明细（`{row, field, error}`，最多 20 条），前端据此提示。Zod 会自动剥掉备份文件里多余的 `id`/`created_at`/`user_id`。
 
 **统计接口一律「一条 `GROUP BY` + JS 补零」**，不要退回按天/按月循环查询。先用循环排出完整的日期（或月份）骨架，再把 `GROUP BY` 的结果填进去——没有记录的日子不会出现在 SQL 结果里，靠骨架补 `0`。月度/年度总计仍单独走一条 SQL，避免按天累加 `REAL` 引入浮点尾差。
 

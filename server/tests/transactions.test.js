@@ -213,6 +213,89 @@ describe('GET /api/transactions/stats/weekly', () => {
   });
 });
 
+// ─── 批量导入 ─────────────────────────────────────────────────────────────────
+
+describe('POST /api/transactions/batch', () => {
+  const batch = (records) =>
+    request(app).post('/api/transactions/batch').set(auth).send({ records });
+
+  const ok = { type: 'expense', amount: 30, category: '餐饮', emoji: '🍜', date: '2026-04-26' };
+
+  it('全部合法时整批导入', async () => {
+    const res = await batch([ok, { ...ok, amount: 12 }]);
+    expect(res.status).toBe(200);
+    expect(res.body.imported).toBe(2);
+    expect(res.body.skippedCount).toBe(0);
+  });
+
+  it('跳过日期格式错误的行并报告行号', async () => {
+    const res = await batch([ok, { ...ok, date: '2026-4-5' }, { ...ok, amount: 5 }]);
+    expect(res.body.imported).toBe(2);
+    expect(res.body.skippedCount).toBe(1);
+    expect(res.body.skipped[0]).toMatchObject({ row: 2, field: 'date' });
+  });
+
+  it('跳过非法 type 而不是整批 500', async () => {
+    const res = await batch([{ ...ok, type: '垃圾' }, ok]);
+    expect(res.status).toBe(200);
+    expect(res.body.imported).toBe(1);
+    expect(res.body.skipped[0]).toMatchObject({ row: 1, field: 'type' });
+  });
+
+  it('跳过金额为负或为 0 的行', async () => {
+    const res = await batch([{ ...ok, amount: -10 }, { ...ok, amount: 0 }, ok]);
+    expect(res.body.imported).toBe(1);
+    expect(res.body.skippedCount).toBe(2);
+  });
+
+  it('跳过分类名超长的行', async () => {
+    const res = await batch([{ ...ok, category: 'x'.repeat(51) }]);
+    expect(res.body.imported).toBe(0);
+    expect(res.body.skipped[0]).toMatchObject({ row: 1, field: 'category' });
+  });
+
+  it('全部非法时返回 imported=0 而不报错', async () => {
+    const res = await batch([{ foo: 'bar' }, {}]);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.imported).toBe(0);
+    expect(res.body.skippedCount).toBe(2);
+  });
+
+  it('skipped 明细最多返回 20 条，skippedCount 仍是总数', async () => {
+    const res = await batch(Array.from({ length: 25 }, () => ({ ...ok, date: 'bad' })));
+    expect(res.body.skippedCount).toBe(25);
+    expect(res.body.skipped).toHaveLength(20);
+  });
+
+  it('备份恢复：带 id / created_at / user_id 的整行能正常导入', async () => {
+    const res = await batch([{ ...ok, id: 999, created_at: '2026-04-26 10:00:00', user_id: 4242 }]);
+    expect(res.body.imported).toBe(1);
+    const list = await request(app).get('/api/transactions').set(auth);
+    expect(list.body.data[0].id).not.toBe(999); // id 由数据库重新分配
+    expect(list.body.data[0].amount).toBe(30);
+  });
+
+  it('缺省的 emoji / note 落库为空字符串', async () => {
+    await batch([{ type: 'income', amount: 50, category: '零花钱', date: '2026-04-26' }]);
+    const list = await request(app).get('/api/transactions').set(auth);
+    expect(list.body.data[0].emoji).toBe('');
+    expect(list.body.data[0].note).toBe('');
+  });
+
+  it('金额是字符串时被转成数字', async () => {
+    const res = await batch([{ ...ok, amount: '38.5' }]);
+    expect(res.body.imported).toBe(1);
+    const list = await request(app).get('/api/transactions').set(auth);
+    expect(list.body.data[0].amount).toBe(38.5);
+  });
+
+  it('空数组或非数组返回 400', async () => {
+    expect((await batch([])).status).toBe(400);
+    expect((await batch('nope')).status).toBe(400);
+  });
+});
+
 // ─── 月汇总 / 年汇总 ──────────────────────────────────────────────────────────
 
 describe('GET /api/transactions/stats/monthly 与 /stats/yearly', () => {

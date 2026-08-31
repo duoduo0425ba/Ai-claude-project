@@ -155,21 +155,40 @@ router.post('/batch', (req, res) => {
     if (!Array.isArray(records) || records.length === 0) {
       return res.status(400).json({ success: false, error: '无有效记录' });
     }
+    // 逐条校验：一行脏数据只跳过自己，不连累整批导入。
+    // 备份文件里多出的 id / created_at / user_id 会被 Zod 自动剥掉
+    const valid = [];
+    const skipped = [];
+    records.forEach((item, i) => {
+      const parsed = transactionSchema.safeParse(item);
+      if (parsed.success) {
+        valid.push(parsed.data);
+      } else {
+        const issue = parsed.error.issues[0];
+        skipped.push({
+          row: i + 1,
+          field: issue.path.join('.') || '(整条)',
+          error: issue.message,
+        });
+      }
+    });
+
     const stmt = db.prepare(`
       INSERT INTO transactions (type, amount, category, emoji, note, date, user_id)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
-    const count = db.transaction((items) => {
-      let n = 0;
-      for (const item of items) {
-        if (item.type && item.amount && item.category && item.date) {
-          stmt.run(item.type, item.amount, item.category, item.emoji || '', item.note || '', item.date, req.user.userId);
-          n++;
-        }
+    db.transaction((items) => {
+      for (const it of items) {
+        stmt.run(it.type, it.amount, it.category, it.emoji, it.note, it.date, req.user.userId);
       }
-      return n;
-    })(records);
-    res.json({ success: true, imported: count });
+    })(valid);
+
+    res.json({
+      success: true,
+      imported: valid.length,
+      skippedCount: skipped.length,
+      skipped: skipped.slice(0, 20), // 只回前 20 条，避免整批出错时响应过大
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

@@ -263,7 +263,11 @@ export default function SettingsPage() {
       if (!confirm(`将导入 ${backup.transactions.length} 条记录，确认继续？`)) return;
       const res = await batchImport(backup.transactions);
       if (backup.settings) await updateSettings(backup.settings);
-      showToast(`恢复成功，导入 ${res.imported} 条记录 🎉`);
+      if (res.skippedCount) {
+        showToast(`恢复完成，导入 ${res.imported} 条，跳过 ${res.skippedCount} 条格式有误的记录 ⚠️`, 'warn');
+      } else {
+        showToast(`恢复成功，导入 ${res.imported} 条记录 🎉`);
+      }
       fetchSettings();
     } catch (err) {
       showToast(err.message, 'error');

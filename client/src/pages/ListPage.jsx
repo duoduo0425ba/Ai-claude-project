@@ -150,7 +150,11 @@ export default function ListPage() {
         return;
       }
       const res = await batchImport(records);
-      showToast(`成功导入 ${res.imported} 条记录 🎉`);
+      if (res.skippedCount) {
+        showToast(`导入 ${res.imported} 条，跳过 ${res.skippedCount} 条格式有误的记录 ⚠️`, 'warn');
+      } else {
+        showToast(`成功导入 ${res.imported} 条记录 🎉`);
+      }
       refresh();
     } catch (err) {
       showToast(err.message, 'error');
