@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   getSettings, updateSettings, getCategories, addCategory, deleteCategory,
-  getRecurringTemplates, addRecurringTemplate, deleteRecurringTemplate, generateRecurring,
+  getRecurringTemplates, addRecurringTemplate, deleteRecurringTemplate, toggleRecurringTemplate, generateRecurring,
   getTransactions, batchImport, changePassword, getUsers, deleteUser,
   getCategoryBudgets, setCategoryBudget, deleteCategoryBudget,
 } from '../api/index';
@@ -211,6 +211,17 @@ export default function SettingsPage() {
     try {
       await deleteRecurringTemplate(id);
       showToast('已删除');
+      fetchTemplates();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  // 可逆操作，不弹 confirm（与删除不同）
+  const handleToggleTemplate = async (t) => {
+    try {
+      await toggleRecurringTemplate(t.id, t.is_active ? 0 : 1);
+      showToast(t.is_active ? '已暂停 ⏸️' : '已恢复 ▶️');
       fetchTemplates();
     } catch (err) {
       showToast(err.message, 'error');
@@ -561,7 +572,7 @@ export default function SettingsPage() {
             {templates.length > 0 && (
               <div className="category-list" style={{ marginBottom: '12px' }}>
                 {templates.map((t) => (
-                  <div key={t.id} className="category-list-item">
+                  <div key={t.id} className={t.is_active ? 'category-list-item' : 'category-list-item paused'}>
                     <div style={{ flex: 1 }}>
                       <span>{t.emoji} {t.category}</span>
                       <span style={{ margin: '0 8px', color: t.type === 'expense' ? 'var(--expense-color)' : 'var(--income-color)' }}>
@@ -570,7 +581,13 @@ export default function SettingsPage() {
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                         {t.frequency === 'monthly' ? `每月 ${t.day_of_month} 号` : `每周${WEEKDAYS[t.day_of_week]}`}
                       </span>
+                      {!t.is_active && (
+                        <span style={{ marginLeft: '8px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>已暂停</span>
+                      )}
                     </div>
+                    <button className="btn btn-ghost delete-btn" onClick={() => handleToggleTemplate(t)}>
+                      {t.is_active ? '暂停' : '恢复'}
+                    </button>
                     <button className="btn btn-danger delete-btn" onClick={() => handleDeleteTemplate(t.id)}>删除</button>
                   </div>
                 ))}

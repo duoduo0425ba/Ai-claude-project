@@ -99,5 +99,7 @@ export const addRecurringTemplate = (data) =>
   request('/recurring', { method: 'POST', body: JSON.stringify(data) });
 export const deleteRecurringTemplate = (id) =>
   request(`/recurring/${id}`, { method: 'DELETE' });
+export const toggleRecurringTemplate = (id, is_active) =>
+  request(`/recurring/${id}`, { method: 'PATCH', body: JSON.stringify({ is_active }) });
 export const generateRecurring = () =>
   request('/recurring/generate', { method: 'POST' });

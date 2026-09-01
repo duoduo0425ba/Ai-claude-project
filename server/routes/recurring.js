@@ -21,6 +21,11 @@ const templateSchema = z.object({
   day_of_month: z.coerce.number().int().min(1).max(28).nullable().optional().default(null),
 });
 
+// 不用 z.coerce.boolean()——它会把 "0" 转成 true
+const toggleSchema = z.object({
+  is_active: z.union([z.boolean(), z.literal(0), z.literal(1)]).transform((v) => (v ? 1 : 0)),
+});
+
 router.get('/', (req, res) => {
   try {
     const templates = db.prepare(
@@ -70,6 +75,26 @@ router.delete('/:id', (req, res) => {
       return res.status(404).json({ success: false, error: '模板不存在' });
     }
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.patch('/:id', (req, res) => {
+  try {
+    const parsed = toggleSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+    }
+    const result = db.prepare(
+      'UPDATE recurring_templates SET is_active = ? WHERE id = ? AND user_id = ?'
+    ).run(parsed.data.is_active, req.params.id, req.user.userId);
+    if (result.changes === 0) {
+      return res.status(404).json({ success: false, error: '模板不存在' });
+    }
+    const template = db.prepare('SELECT * FROM recurring_templates WHERE id = ?')
+      .get(req.params.id);
+    res.json({ success: true, data: template });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

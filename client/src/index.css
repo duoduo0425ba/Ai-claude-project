@@ -1257,6 +1257,10 @@ body::before {
   opacity: 0.7;
 }
 
+.category-list-item.paused {
+  opacity: 0.6;
+}
+
 .category-list-item .delete-btn {
   padding: 4px 12px;
   font-size: 0.8rem;
