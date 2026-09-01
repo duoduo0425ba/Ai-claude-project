@@ -740,6 +740,23 @@ body::before {
   border-color: var(--sakura-pink);
 }
 
+/* 交易卡片上的标签小药丸；尺寸压小，避免撑破卡片行高 */
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.tag-pill {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--lavender-light);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
 /* 按金额排序时不按日期分组，平铺展示并在每条上方标注日期 */
 .sorted-list {
   display: flex;

@@ -17,7 +17,55 @@ const transactionSchema = z.object({
   emoji: z.string().max(10).optional().default(''),
   note: z.string().max(500).optional().default(''),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期格式必须为 YYYY-MM-DD'),
+  // max(10) 作用于去重前的原始数组；trim 在 min/max 校验之前执行
+  tags: z.array(
+    z.string().trim().min(1, '标签不能为空').max(20, '标签最长 20 个字')
+  ).max(10, '标签最多 10 个').default([]).transform((a) => [...new Set(a)]),
 });
+
+// ── 标签 helper（纯函数，调用方负责包 db.transaction）─────────────────────────
+
+// 逐个 INSERT OR IGNORE 后回查 id，同名标签按 (user_id, name) 唯一复用
+function upsertTags(userId, names) {
+  const insert = db.prepare('INSERT OR IGNORE INTO tags (user_id, name) VALUES (?, ?)');
+  const select = db.prepare('SELECT id FROM tags WHERE user_id = ? AND name = ?');
+  return names.map((name) => {
+    insert.run(userId, name);
+    return select.get(userId, name).id;
+  });
+}
+
+// 全量替换一笔交易的标签集（PUT 语义）；names 为空即清空
+function setTransactionTags(txId, userId, names) {
+  db.prepare('DELETE FROM transaction_tags WHERE transaction_id = ?').run(txId);
+  const link = db.prepare(
+    'INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id) VALUES (?, ?)'
+  );
+  for (const tagId of upsertTags(userId, names)) {
+    link.run(txId, tagId);
+  }
+}
+
+// 给一批交易行挂上 tags 数组：一条 IN 查询 + JS 分组，避免 N+1
+function attachTags(rows) {
+  if (rows.length === 0) return rows;
+  const placeholders = rows.map(() => '?').join(',');
+  const links = db.prepare(`
+    SELECT tt.transaction_id, g.name
+    FROM transaction_tags tt JOIN tags g ON g.id = tt.tag_id
+    WHERE tt.transaction_id IN (${placeholders})
+    ORDER BY g.name
+  `).all(...rows.map((r) => r.id));
+  const byTx = new Map();
+  for (const { transaction_id, name } of links) {
+    if (!byTx.has(transaction_id)) byTx.set(transaction_id, []);
+    byTx.get(transaction_id).push(name);
+  }
+  for (const row of rows) {
+    row.tags = byTx.get(row.id) || [];
+  }
+  return rows;
+}
 
 // ── 设置 ──────────────────────────────────────────────────────────────────────
 
@@ -66,6 +114,12 @@ router.get('/', (req, res) => {
       where += ' AND (note LIKE ? OR category LIKE ?)';
       params.push(`%${keyword}%`, `%${keyword}%`);
     }
+    // 必须在 COUNT 之前拼进 where，否则 total 与 data 不同步
+    if (req.query.tag) {
+      where += ' AND id IN (SELECT tt.transaction_id FROM transaction_tags tt' +
+        ' JOIN tags g ON g.id = tt.tag_id WHERE g.user_id = ? AND g.name = ?)';
+      params.push(userId, req.query.tag);
+    }
 
     const total = db.prepare(`SELECT COUNT(*) as cnt FROM transactions ${where}`)
       .get(...params).cnt;
@@ -84,7 +138,7 @@ router.get('/', (req, res) => {
     }
 
     const rows = db.prepare(sql).all(...params);
-    res.json({ success: true, data: rows, total });
+    res.json({ success: true, data: attachTags(rows), total });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -96,15 +150,19 @@ router.post('/', (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ success: false, error: parsed.error.issues[0].message });
     }
-    const { type, amount, category, emoji, note, date } = parsed.data;
+    const { type, amount, category, emoji, note, date, tags } = parsed.data;
 
-    const result = db.prepare(`
-      INSERT INTO transactions (type, amount, category, emoji, note, date, user_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(type, amount, category, emoji, note, date, req.user.userId);
+    const newId = db.transaction(() => {
+      const result = db.prepare(`
+        INSERT INTO transactions (type, amount, category, emoji, note, date, user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(type, amount, category, emoji, note, date, req.user.userId);
+      setTransactionTags(result.lastInsertRowid, req.user.userId, tags);
+      return result.lastInsertRowid;
+    })();
 
-    const newRecord = db.prepare('SELECT * FROM transactions WHERE id = ?')
-      .get(result.lastInsertRowid);
+    const newRecord = db.prepare('SELECT * FROM transactions WHERE id = ?').get(newId);
+    attachTags([newRecord]);
     res.json({ success: true, data: newRecord });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -117,18 +175,26 @@ router.put('/:id', (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ success: false, error: parsed.error.issues[0].message });
     }
-    const { type, amount, category, emoji, note, date } = parsed.data;
+    const { type, amount, category, emoji, note, date, tags } = parsed.data;
 
-    const result = db.prepare(`
-      UPDATE transactions
-      SET type = ?, amount = ?, category = ?, emoji = ?, note = ?, date = ?
-      WHERE id = ? AND user_id = ?
-    `).run(type, amount, category, emoji, note, date, req.params.id, req.user.userId);
+    const changes = db.transaction(() => {
+      const result = db.prepare(`
+        UPDATE transactions
+        SET type = ?, amount = ?, category = ?, emoji = ?, note = ?, date = ?
+        WHERE id = ? AND user_id = ?
+      `).run(type, amount, category, emoji, note, date, req.params.id, req.user.userId);
+      if (result.changes > 0) {
+        // UPDATE 命中已证明所有权；不传 tags 时 Zod 默认 [] 即清空
+        setTransactionTags(req.params.id, req.user.userId, tags);
+      }
+      return result.changes;
+    })();
 
-    if (result.changes === 0) {
+    if (changes === 0) {
       return res.status(404).json({ success: false, error: '记录不存在' });
     }
     const updated = db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id);
+    attachTags([updated]);
     res.json({ success: true, data: updated });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -137,10 +203,17 @@ router.put('/:id', (req, res) => {
 
 router.delete('/:id', (req, res) => {
   try {
-    const result = db.prepare(
-      'DELETE FROM transactions WHERE id = ? AND user_id = ?'
-    ).run(req.params.id, req.user.userId);
-    if (result.changes === 0) {
+    const changes = db.transaction(() => {
+      const result = db.prepare(
+        'DELETE FROM transactions WHERE id = ? AND user_id = ?'
+      ).run(req.params.id, req.user.userId);
+      if (result.changes > 0) {
+        // 用户范围 DELETE 命中已证明所有权，关联表无 user_id 可查，需手动清
+        db.prepare('DELETE FROM transaction_tags WHERE transaction_id = ?').run(req.params.id);
+      }
+      return result.changes;
+    })();
+    if (changes === 0) {
       return res.status(404).json({ success: false, error: '记录不存在' });
     }
     res.json({ success: true });
@@ -179,7 +252,10 @@ router.post('/batch', (req, res) => {
     `);
     db.transaction((items) => {
       for (const it of items) {
-        stmt.run(it.type, it.amount, it.category, it.emoji, it.note, it.date, req.user.userId);
+        const result = stmt.run(it.type, it.amount, it.category, it.emoji, it.note, it.date, req.user.userId);
+        if (it.tags.length > 0) {
+          setTransactionTags(result.lastInsertRowid, req.user.userId, it.tags);
+        }
       }
     })(valid);
 

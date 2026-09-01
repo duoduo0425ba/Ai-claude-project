@@ -7,6 +7,7 @@ const transactionsRouter = require('./routes/transactions');
 const categoriesRouter = require('./routes/categories');
 const recurringRouter = require('./routes/recurring');
 const budgetsRouter   = require('./routes/budgets');
+const tagsRouter      = require('./routes/tags');
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.use('/api/transactions', authMiddleware, transactionsRouter);
 app.use('/api/categories', authMiddleware, categoriesRouter);
 app.use('/api/recurring', authMiddleware, recurringRouter);
 app.use('/api/budgets',   authMiddleware, budgetsRouter);
+app.use('/api/tags',      authMiddleware, tagsRouter);
 
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/dist')));

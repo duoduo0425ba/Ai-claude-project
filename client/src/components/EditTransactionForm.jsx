@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import CategoryPicker from './CategoryPicker';
+import TagPicker from './TagPicker';
 import { updateTransaction } from '../api';
 
 export default function EditTransactionForm({ transaction, onSuccess, onCancel }) {
@@ -8,6 +9,7 @@ export default function EditTransactionForm({ transaction, onSuccess, onCancel }
   const [category, setCategory] = useState('');
   const [emoji, setEmoji] = useState('');
   const [note, setNote] = useState('');
+  const [tags, setTags] = useState([]);
   const [date, setDate] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -18,6 +20,7 @@ export default function EditTransactionForm({ transaction, onSuccess, onCancel }
       setCategory(transaction.category);
       setEmoji(transaction.emoji);
       setNote(transaction.note || '');
+      setTags(transaction.tags || []);
       setDate(transaction.date);
     }
   }, [transaction]);
@@ -51,6 +54,7 @@ export default function EditTransactionForm({ transaction, onSuccess, onCancel }
         category,
         emoji,
         note,
+        tags, // PUT 是全量替换：漏传会清空该笔交易的标签
         date,
       });
       onSuccess?.('更新成功 ✨', 'success');
@@ -122,6 +126,12 @@ export default function EditTransactionForm({ transaction, onSuccess, onCancel }
           onChange={(e) => setNote(e.target.value)}
           id="edit-input-note"
         />
+      </div>
+
+      {/* 标签 */}
+      <div className="form-group">
+        <label>标签 (可选)</label>
+        <TagPicker value={tags} onChange={setTags} />
       </div>
 
       {/* 日期 */}

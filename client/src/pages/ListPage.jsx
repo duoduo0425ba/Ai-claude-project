@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getTransactions, deleteTransaction, batchImport, getCategories } from '../api';
+import { getTransactions, deleteTransaction, batchImport, getCategories, getTags } from '../api';
 import { importFromExcel, exportToExcel } from '../utils/excel';
 import TransactionCard from '../components/TransactionCard';
 import EditTransactionForm from '../components/EditTransactionForm';
@@ -15,6 +15,9 @@ export default function ListPage() {
   const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [filterCategory, setFilterCategory] = useLocalStorage('listPageCategory', '全部');
+  // 单字符串（'' = 不筛选），prevFilters 的恒等比较才安全
+  const [filterTag, setFilterTag] = useLocalStorage('listPageTag', '');
+  const [tagOptions, setTagOptions] = useState([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [showBalanceModal, setShowBalanceModal] = useState(false);
@@ -43,6 +46,7 @@ export default function ListPage() {
       try {
         const params = { page: currentPage, pageSize: ITEMS_PER_PAGE };
         if (filterCategory !== '全部') params.category = filterCategory;
+        if (filterTag) params.tag = filterTag;
         if (keyword) params.keyword = keyword;
         if (startDate) params.startDate = startDate;
         if (endDate) params.endDate = endDate;
@@ -60,18 +64,27 @@ export default function ListPage() {
 
     fetchData();
     return () => controller.abort();
-  }, [currentPage, filterCategory, keyword, startDate, endDate, amountSort, refreshKey, showToast]);
+  }, [currentPage, filterCategory, filterTag, keyword, startDate, endDate, amountSort, refreshKey, showToast]);
 
   // 筛选或排序变更时回到第一页
-  const prevFilters = useRef({ filterCategory, keyword, startDate, endDate, amountSort });
+  const prevFilters = useRef({ filterCategory, filterTag, keyword, startDate, endDate, amountSort });
   useEffect(() => {
     const p = prevFilters.current;
-    if (p.filterCategory !== filterCategory || p.keyword !== keyword ||
+    if (p.filterCategory !== filterCategory || p.filterTag !== filterTag || p.keyword !== keyword ||
         p.startDate !== startDate || p.endDate !== endDate || p.amountSort !== amountSort) {
-      prevFilters.current = { filterCategory, keyword, startDate, endDate, amountSort };
+      prevFilters.current = { filterCategory, filterTag, keyword, startDate, endDate, amountSort };
       setCurrentPage(1);
     }
-  }, [filterCategory, keyword, startDate, endDate, amountSort]);
+  }, [filterCategory, filterTag, keyword, startDate, endDate, amountSort]);
+
+  // 标签筛选栏选项；依赖 refreshKey，新记的标签能及时出现
+  useEffect(() => {
+    let isMounted = true;
+    getTags()
+      .then((res) => { if (isMounted) setTagOptions((res.data || []).map((t) => t.name)); })
+      .catch(() => {});
+    return () => { isMounted = false; };
+  }, [refreshKey]);
 
   useEffect(() => {
     let isMounted = true;
@@ -167,6 +180,7 @@ export default function ListPage() {
     try {
       const params = {};
       if (filterCategory !== '全部') params.category = filterCategory;
+      if (filterTag) params.tag = filterTag;
       if (keyword) params.keyword = keyword;
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
@@ -287,6 +301,27 @@ export default function ListPage() {
         ))}
       </div>
 
+      {/* 标签筛选 */}
+      {tagOptions.length > 0 && (
+        <div className="filter-row section-gap">
+          <button
+            className={`filter-chip ${filterTag === '' ? 'active' : ''}`}
+            onClick={() => setFilterTag('')}
+          >
+            🏷️ 全部
+          </button>
+          {tagOptions.map((name) => (
+            <button
+              key={name}
+              className={`filter-chip ${filterTag === name ? 'active' : ''}`}
+              onClick={() => setFilterTag(name)}
+            >
+              #{name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* 排序 */}
       <div className="filter-row section-gap">
         <button
@@ -321,13 +356,14 @@ export default function ListPage() {
       ) : sortedDates.length === 0 ? (
         <div className="empty-state">
           <div className="empty-emoji">🐱</div>
-          {(filterCategory !== '全部' || keyword || startDate || endDate) ? (
+          {(filterCategory !== '全部' || filterTag || keyword || startDate || endDate) ? (
             <>
               <p>没有符合条件的记录呢</p>
               <button
                 className="btn btn-ghost"
                 onClick={() => {
                   setFilterCategory('全部');
+                  setFilterTag('');
                   setKeyword('');
                   setStartDate('');
                   setEndDate('');

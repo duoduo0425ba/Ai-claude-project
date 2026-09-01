@@ -127,6 +127,11 @@ router.delete('/users/:id', authMiddleware, (req, res) => {
 
     // 级联删除该用户所有数据
     db.transaction(() => {
+      // 关联表无 user_id，须先借 transactions 定位再删
+      db.prepare(
+        'DELETE FROM transaction_tags WHERE transaction_id IN (SELECT id FROM transactions WHERE user_id = ?)'
+      ).run(targetId);
+      db.prepare('DELETE FROM tags WHERE user_id = ?').run(targetId);
       db.prepare('DELETE FROM transactions WHERE user_id = ?').run(targetId);
       db.prepare('DELETE FROM categories WHERE user_id = ?').run(targetId);
       db.prepare('DELETE FROM settings WHERE user_id = ?').run(targetId);

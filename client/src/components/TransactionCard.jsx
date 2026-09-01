@@ -1,5 +1,5 @@
 export default function TransactionCard({ transaction, onDelete, onEdit }) {
-  const { id, type, amount, category, emoji, note } = transaction;
+  const { id, type, amount, category, emoji, note, tags } = transaction;
 
   return (
     <div className="transaction-card">
@@ -9,6 +9,12 @@ export default function TransactionCard({ transaction, onDelete, onEdit }) {
       <div className="transaction-info">
         <div className="category">{category}</div>
         {note && <div className="note">{note}</div>}
+        {/* 可选链必须有：stats 接口的记录不带 tags，此组件是共用的 */}
+        {tags?.length > 0 && (
+          <div className="tag-row">
+            {tags.map((t) => <span key={t} className="tag-pill">#{t}</span>)}
+          </div>
+        )}
       </div>
       <div className={`transaction-amount ${type}`}>
         {type === 'income' ? '+' : '-'}¥{amount.toFixed(2)}

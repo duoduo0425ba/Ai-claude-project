@@ -93,6 +93,9 @@ export const setCategoryBudget = (category, amount) =>
 export const deleteCategoryBudget = (category) =>
   request(`/budgets/${encodeURIComponent(category)}`, { method: 'DELETE' });
 
+// 标签（随交易保存自动创建，此接口仅供筛选栏和输入建议）
+export const getTags = () => request('/tags');
+
 // 周期账单
 export const getRecurringTemplates = () => request('/recurring');
 export const addRecurringTemplate = (data) =>

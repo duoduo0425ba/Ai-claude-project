@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import CategoryPicker from './CategoryPicker';
+import TagPicker from './TagPicker';
 import { addTransaction } from '../api';
 import { formatLocalDate } from '../utils/date';
 
@@ -10,6 +11,7 @@ export default function TransactionForm({ onSuccess }) {
   const [category, setCategory] = useState('');
   const [emoji, setEmoji] = useState('');
   const [note, setNote] = useState('');
+  const [tags, setTags] = useState([]);
   const [date, setDate] = useState(today);
   const [loading, setLoading] = useState(false);
 
@@ -31,6 +33,7 @@ export default function TransactionForm({ onSuccess }) {
         category,
         emoji,
         note,
+        tags,
         date,
       });
       // 成功，重置表单
@@ -38,6 +41,7 @@ export default function TransactionForm({ onSuccess }) {
       setCategory('');
       setEmoji('');
       setNote('');
+      setTags([]);
       setDate(today);
       onSuccess?.('记账成功啦~ 🎉', 'success');
     } catch (err) {
@@ -107,6 +111,12 @@ export default function TransactionForm({ onSuccess }) {
           onChange={(e) => setNote(e.target.value)}
           id="input-note"
         />
+      </div>
+
+      {/* 标签 */}
+      <div className="form-group">
+        <label>标签 (可选)</label>
+        <TagPicker value={tags} onChange={setTags} />
       </div>
 
       {/* 日期 */}
