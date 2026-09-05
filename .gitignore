@@ -9,6 +9,9 @@ server/data.db
 server/data.db-shm
 server/data.db-wal
 
+# JWT 签名密钥，每台机器各自生成，绝不能提交
+server/.jwt-secret
+
 零花钱记账.app/
 
 .DS_Store
@@ -16,6 +19,9 @@ server/data.db-wal
 
 PROJECT_PROMPT.md
 Reph_ByPy.md
+
+# Claude Code 个人权限配置，每人各自持有
+.claude/settings.local.json
 
 # 本地笔记与工具目录，不进版本库
 claude-code-tutorial.html

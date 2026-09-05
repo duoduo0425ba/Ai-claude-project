@@ -1,4 +1,6 @@
 process.env.DB_PATH = ':memory:';
+// 管理员初始口令不再硬编码，测试里显式注入一个
+process.env.ADMIN_PASSWORD = 'test-admin-pw-2026';
 
 const request = require('supertest');
 const app = require('../app');
@@ -332,7 +334,7 @@ describe('管理员删除用户时级联清理标签', () => {
     await add(tx({ tags: ['临时标签'] }), authC);
 
     const login = await request(app).post('/api/auth/login').send({
-      username: 'admin', password: 'admin123',
+      username: 'admin', password: process.env.ADMIN_PASSWORD,
     });
     const authAdmin = { Authorization: `Bearer ${login.body.data.token}` };
 

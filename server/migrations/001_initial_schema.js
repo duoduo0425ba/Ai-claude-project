@@ -2,6 +2,7 @@
 // 所有语句幂等，可安全重复执行
 
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 exports.up = (db) => {
   // ── 建表 ────────────────────────────────────────────────────────────────────
@@ -67,11 +68,24 @@ exports.up = (db) => {
 
   let adminUser = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
   if (!adminUser) {
-    const hash = bcrypt.hashSync('admin123', 10);
+    // 初始口令：优先读环境变量，否则随机生成并打印一次。
+    // 绝不能用硬编码的固定密码——那等于所有新建的库都共用一个公开口令
+    const initialPassword =
+      process.env.ADMIN_PASSWORD || crypto.randomBytes(9).toString('base64url');
+    const hash = bcrypt.hashSync(initialPassword, 10);
     db.prepare(
       "INSERT INTO users (username, password_hash, role) VALUES ('admin', ?, 'admin')"
     ).run(hash);
     adminUser = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
+
+    // 测试用的内存库不打印，免得刷屏
+    if (!process.env.ADMIN_PASSWORD && process.env.DB_PATH !== ':memory:') {
+      console.log('\n  ┌─ 已创建管理员账号 ──────────────────────');
+      console.log('  │  用户名：admin');
+      console.log(`  │  密码：  ${initialPassword}`);
+      console.log('  │  仅显示这一次，请登录后立即修改');
+      console.log('  └─────────────────────────────────────────\n');
+    }
   }
   const adminId = adminUser.id;
 
