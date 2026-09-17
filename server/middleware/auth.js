@@ -31,7 +31,7 @@ function loadSecret() {
 const JWT_SECRET = loadSecret();
 
 // require('../db') 时迁移已经跑完，users 表一定存在；语句预编译一次后复用
-const findUserStmt = db.prepare('SELECT id, username, role FROM users WHERE id = ?');
+const findUserStmt = db.prepare('SELECT id, username, role, token_version FROM users WHERE id = ?');
 
 module.exports = function authMiddleware(req, res, next) {
   const header = req.headers.authorization;
@@ -57,6 +57,11 @@ module.exports = function authMiddleware(req, res, next) {
   }
   if (!user) {
     return res.status(401).json({ success: false, error: '账号不存在，请重新登录' });
+  }
+
+  // 改密码会让 token_version +1，旧 Token 载荷里还是老版本号，在这里被拦下
+  if (payload.tokenVersion !== user.token_version) {
+    return res.status(401).json({ success: false, error: '登录状态已失效，请重新登录' });
   }
 
   req.user = { userId: user.id, username: user.username, role: user.role };

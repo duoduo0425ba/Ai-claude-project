@@ -30,7 +30,8 @@ cd client && npm run lint
 
 - 所有受保护路由需要 `Authorization: Bearer <token>`（JWT，7 天有效期）
 - Token 存储在 **`sessionStorage`**（关闭浏览器自动清除——有意为之）
-- `server/middleware/auth.js` 验证 Token，将 `{ userId, username, role }` 挂载到 `req.user`
+- `server/middleware/auth.js` 验证 Token 后**回查 `users` 表**，将 `{ userId, username, role }` 挂载到 `req.user`——role 以数据库为准，不信任载荷；用户已删除返回 401
+- **`users.token_version`**（`004_token_version.js`）：签 Token 时写入 `tokenVersion`，中间件比对不一致即 401。改密码必须 `token_version + 1`，这是让旧 Token 立即失效的唯一机制——将来加「管理员重置密码」之类的接口时同样要 +1
 - `client/src/api/index.js` 自动注入 Token；401 响应时清除 Token 并跳转到 `/login`
 - `client/src/App.jsx` — `AuthLayout` 包裹所有路由，`/login` 和 `/register` 除外
 
@@ -38,7 +39,7 @@ cd client && npm run lint
 
 - `server/migrate.js` 在每次启动时运行，按序执行 `server/migrations/NNN_*.js`
 - 已执行版本记录在 `schema_migrations` 表中
-- 添加 Schema 变更：新建 `server/migrations/003_*.js`，导出 `up(db)` 函数
+- 添加 Schema 变更：新建 `server/migrations/NNN_*.js`（编号接在现有最大值之后），导出 `up(db)` 函数
 - `db.js` 仅负责打开连接并调用 `runMigrations`
 - `seedDefaults(db, userId)`（从 `001_initial_schema.js` 导出）为新用户初始化默认设置和分类，在注册时调用
 

@@ -15,7 +15,7 @@ const credSchema = z.object({
 
 function makeToken(user) {
   return jwt.sign(
-    { userId: user.id, username: user.username, role: user.role },
+    { userId: user.id, username: user.username, role: user.role, tokenVersion: user.token_version },
     JWT_SECRET,
     { expiresIn: '7d' }
   );
@@ -43,7 +43,7 @@ router.post('/register', (req, res) => {
     const newUserId = result.lastInsertRowid;
     seedDefaults(newUserId);
 
-    const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(newUserId);
+    const user = db.prepare('SELECT id, username, role, token_version FROM users WHERE id = ?').get(newUserId);
     res.json({ success: true, data: { token: makeToken(user), username: user.username, role: user.role } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -87,7 +87,10 @@ router.post('/change-password', authMiddleware, (req, res) => {
     }
 
     const hash = bcrypt.hashSync(newPassword, 10);
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.user.userId);
+    // 版本 +1 让所有已签发的 Token 立即失效（含被盗的）
+    db.prepare(
+      'UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?'
+    ).run(hash, req.user.userId);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

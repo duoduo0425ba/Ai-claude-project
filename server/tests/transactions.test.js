@@ -542,4 +542,36 @@ describe('账号状态以数据库为准，不只信 Token 载荷', () => {
     expect(res.headers['content-type']).toMatch(/json/);
     expect(res.body).toEqual({ success: false, error: '服务器错误' });
   });
+
+  it('改密码后旧 Token 立即失效，重新登录拿到的新 Token 可用', async () => {
+    const reg = await request(app).post('/api/auth/register').send({
+      username: 'pwchanger', password: 'password123',
+    });
+    const oldAuth = { Authorization: `Bearer ${reg.body.data.token}` };
+    expect((await request(app).get('/api/transactions').set(oldAuth)).status).toBe(200);
+
+    const change = await request(app).post('/api/auth/change-password').set(oldAuth)
+      .send({ oldPassword: 'password123', newPassword: 'newpass456' });
+    expect(change.body.success).toBe(true);
+
+    // 场景：Token 被盗，受害者改密后攻击者手里的旧 Token 必须马上作废
+    expect((await request(app).get('/api/transactions').set(oldAuth)).status).toBe(401);
+
+    const login = await request(app).post('/api/auth/login').send({
+      username: 'pwchanger', password: 'newpass456',
+    });
+    const newAuth = { Authorization: `Bearer ${login.body.data.token}` };
+    expect((await request(app).get('/api/transactions').set(newAuth)).status).toBe(200);
+  });
+
+  it('不带版本号的旧格式 Token 一律拒绝', async () => {
+    const jwt = require('jsonwebtoken');
+    const { JWT_SECRET } = require('../middleware/auth');
+    const me = db.prepare("SELECT id FROM users WHERE username = 'testuser'").get();
+    // 本次改动之前签发的 Token 就是这个形状：没有 tokenVersion 字段
+    const legacy = jwt.sign({ userId: me.id, username: 'testuser', role: 'user' }, JWT_SECRET);
+    const res = await request(app).get('/api/transactions')
+      .set({ Authorization: `Bearer ${legacy}` });
+    expect(res.status).toBe(401);
+  });
 });
