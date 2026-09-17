@@ -423,3 +423,123 @@ describe('GET /api/transactions/stats/budget', () => {
     expect(res.body.data.status).toBe('danger');
   });
 });
+
+// ─── 分页参数健壮性 ───────────────────────────────────────────────────────────
+
+describe('分页参数异常时不应 500', () => {
+  beforeEach(async () => {
+    for (const d of ['2026-04-01', '2026-04-02', '2026-04-03']) {
+      await request(app).post('/api/transactions').set(auth)
+        .send({ type: 'expense', amount: 10, category: '餐饮', date: d });
+    }
+  });
+
+  it.each(['abc', '', '-5', '0'])('page=%s 回落到第 1 页', async (page) => {
+    const res = await request(app)
+      .get(`/api/transactions?page=${page}&pageSize=2`).set(auth);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(2);
+    expect(res.body.total).toBe(3);
+  });
+
+  it('超大 page 不会 500，只是返回空列表', async () => {
+    const res = await request(app)
+      .get(`/api/transactions?page=${'9'.repeat(400)}&pageSize=2`).set(auth);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+    expect(res.body.total).toBe(3);
+  });
+
+  it('page 传成数组（?page=2&page=3）也能正常分页', async () => {
+    const res = await request(app)
+      .get('/api/transactions?page=2&page=3&pageSize=2').set(auth);
+    expect(res.status).toBe(200);
+    // Express 解析成 ['2','3']，parseInt 拿到 2：每页 2 条共 3 条，第 2 页剩 1 条
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.total).toBe(3);
+  });
+});
+
+// ─── 鉴权以数据库为准 ─────────────────────────────────────────────────────────
+
+describe('账号状态以数据库为准，不只信 Token 载荷', () => {
+  it('用户被删除后，未过期的旧 Token 立即失效', async () => {
+    const reg = await request(app).post('/api/auth/register').send({
+      username: 'ghostuser', password: 'password123',
+    });
+    const ghostAuth = { Authorization: `Bearer ${reg.body.data.token}` };
+
+    const before = await request(app).get('/api/transactions').set(ghostAuth);
+    expect(before.status).toBe(200);
+
+    db.prepare("DELETE FROM users WHERE username = 'ghostuser'").run();
+
+    const after = await request(app).get('/api/transactions').set(ghostAuth);
+    expect(after.status).toBe(401);
+  });
+
+  it('管理员被降级后，旧 Token 里的 admin 角色不再生效', async () => {
+    await request(app).post('/api/auth/register').send({
+      username: 'exadmin', password: 'password123',
+    });
+    db.prepare("UPDATE users SET role = 'admin' WHERE username = 'exadmin'").run();
+
+    // 此刻登录，Token 载荷里 role = admin
+    const login = await request(app).post('/api/auth/login').send({
+      username: 'exadmin', password: 'password123',
+    });
+    const exAuth = { Authorization: `Bearer ${login.body.data.token}` };
+    expect((await request(app).get('/api/auth/users').set(exAuth)).status).toBe(200);
+
+    db.prepare("UPDATE users SET role = 'user' WHERE username = 'exadmin'").run();
+
+    // 同一个 Token，权限应立即以数据库为准被收回
+    const res = await request(app).get('/api/auth/users').set(exAuth);
+    expect(res.status).toBe(403);
+  });
+
+  it('管理员被降级后，旧 Token 不能再删除用户', async () => {
+    for (const username of ['exadmin2', 'victim']) {
+      await request(app).post('/api/auth/register').send({ username, password: 'password123' });
+    }
+    db.prepare("UPDATE users SET role = 'admin' WHERE username = 'exadmin2'").run();
+    const login = await request(app).post('/api/auth/login').send({
+      username: 'exadmin2', password: 'password123',
+    });
+    const exAuth = { Authorization: `Bearer ${login.body.data.token}` };
+    db.prepare("UPDATE users SET role = 'user' WHERE username = 'exadmin2'").run();
+
+    // 删用户是最危险的管理员操作，且每个路由各自检查 role，必须单独确认
+    const victim = db.prepare("SELECT id FROM users WHERE username = 'victim'").get();
+    const res = await request(app).delete(`/api/auth/users/${victim.id}`).set(exAuth);
+    expect(res.status).toBe(403);
+    expect(db.prepare("SELECT id FROM users WHERE username = 'victim'").get()).toBeDefined();
+  });
+
+  it('用户被删除后，旧 Token 也不能再改密码', async () => {
+    const reg = await request(app).post('/api/auth/register').send({
+      username: 'ghostuser2', password: 'password123',
+    });
+    const ghostAuth = { Authorization: `Bearer ${reg.body.data.token}` };
+    db.prepare("DELETE FROM users WHERE username = 'ghostuser2'").run();
+
+    // change-password 在 auth.js 里单独挂的中间件，要单独确认它也被拦下
+    const res = await request(app).post('/api/auth/change-password').set(ghostAuth)
+      .send({ oldPassword: 'password123', newPassword: 'newpass123' });
+    expect(res.status).toBe(401);
+  });
+
+  it('查库出错时返回 JSON 格式的 500，而不是 HTML 错误页', async () => {
+    // 正常签发的 Token 里 userId 一定是数字。这里故意签一个对象，
+    // 让 better-sqlite3 绑定参数时抛错，从而走到中间件的 catch 分支
+    const jwt = require('jsonwebtoken');
+    const { JWT_SECRET } = require('../middleware/auth');
+    const badToken = jwt.sign({ userId: {} }, JWT_SECRET);
+
+    const res = await request(app).get('/api/transactions')
+      .set({ Authorization: `Bearer ${badToken}` });
+    expect(res.status).toBe(500);
+    expect(res.headers['content-type']).toMatch(/json/);
+    expect(res.body).toEqual({ success: false, error: '服务器错误' });
+  });
+});

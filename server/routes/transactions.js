@@ -133,7 +133,10 @@ router.get('/', (req, res) => {
     let sql = `SELECT * FROM transactions ${where} ORDER BY ${orderBy}`;
     if (page !== undefined) {
       const limit = Math.min(Math.max(parseInt(pageSize) || 30, 1), 100);
-      const offset = (Math.max(parseInt(page), 1) - 1) * limit;
+      // page 与 pageSize 同款三层兜底：非数字回落到 1，再夹住上下限。
+      // 少了 || 1 的话，?page=abc 会拼出 OFFSET NaN 直接 500
+      const pageNum = Math.min(Math.max(parseInt(page) || 1, 1), 1000000);
+      const offset = (pageNum - 1) * limit;
       sql += ` LIMIT ${limit} OFFSET ${offset}`;
     }
 
