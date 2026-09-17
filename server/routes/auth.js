@@ -5,8 +5,10 @@ const jwt = require('jsonwebtoken');
 const { z } = require('zod');
 const db = require('../db');
 const { seedDefaults } = require('../db');
+const serverError = require('../utils/serverError');
 const { JWT_SECRET } = require('../middleware/auth');
 const authMiddleware = require('../middleware/auth');
+const { loginLimiter, registerLimiter, changePasswordLimiter } = require('../middleware/rateLimit');
 
 const credSchema = z.object({
   username: z.string().min(3, '用户名至少 3 个字符').max(20).regex(/^\S+$/, '用户名不能包含空格'),
@@ -22,7 +24,7 @@ function makeToken(user) {
 }
 
 // POST /api/auth/register
-router.post('/register', (req, res) => {
+router.post('/register', registerLimiter, (req, res) => {
   try {
     const parsed = credSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -46,12 +48,12 @@ router.post('/register', (req, res) => {
     const user = db.prepare('SELECT id, username, role, token_version FROM users WHERE id = ?').get(newUserId);
     res.json({ success: true, data: { token: makeToken(user), username: user.username, role: user.role } });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
 // POST /api/auth/login
-router.post('/login', (req, res) => {
+router.post('/login', loginLimiter, (req, res) => {
   try {
     const parsed = credSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -66,12 +68,12 @@ router.post('/login', (req, res) => {
 
     res.json({ success: true, data: { token: makeToken(user), username: user.username, role: user.role } });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
 // POST /api/auth/change-password  (需登录)
-router.post('/change-password', authMiddleware, (req, res) => {
+router.post('/change-password', authMiddleware, changePasswordLimiter, (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
     if (!oldPassword || !newPassword) {
@@ -93,7 +95,7 @@ router.post('/change-password', authMiddleware, (req, res) => {
     ).run(hash, req.user.userId);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -108,7 +110,7 @@ router.get('/users', authMiddleware, (req, res) => {
     ).all();
     res.json({ success: true, data: users });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -144,7 +146,7 @@ router.delete('/users/:id', authMiddleware, (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 

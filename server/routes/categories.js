@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db');
+const serverError = require('../utils/serverError');
 
 const router = express.Router();
 
@@ -37,7 +38,7 @@ router.post('/', (req, res) => {
     if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
       return res.json({ success: false, error: '同类型下已存在同名分类' });
     }
-    res.json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -52,7 +53,7 @@ router.delete('/:id', (req, res) => {
     db.prepare('DELETE FROM categories WHERE id = ? AND user_id = ?').run(id, req.user.userId);
     res.json({ success: true });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const serverError = require('../utils/serverError');
 const { z } = require('zod');
 
 function formatLocalDate(date = new Date()) {
@@ -22,6 +23,21 @@ const transactionSchema = z.object({
     z.string().trim().min(1, '标签不能为空').max(20, '标签最长 20 个字')
   ).max(10, '标签最多 10 个').default([]).transform((a) => [...new Set(a)]),
 });
+
+// PUT /settings 只接受这 4 个设置项，其他键会被 Zod 自动剥掉，不会写进数据库。
+// 值必须是数字；备份文件里存的是字符串（如 "300"），coerce 可以兼容
+const settingValue = z.coerce.number('设置值必须是数字').optional();
+const settingsSchema = z.object({
+  monthly_income: settingValue,
+  warn_threshold: settingValue,
+  danger_threshold: settingValue,
+  initial_balance: settingValue,
+}, '设置数据格式错误');
+
+// 不分页查询（备份、导出 Excel 用）和 /batch 导入的条数上限。
+// 超过上限直接报错，绝不静默截断——被截断的备份比没有备份更危险。
+// 必须小于 SQLite 单条语句的参数上限 32766：attachTags 会把所有 id 放进一条 IN 查询
+const MAX_BULK_ROWS = 20000;
 
 // ── 标签 helper（纯函数，调用方负责包 db.transaction）─────────────────────────
 
@@ -77,12 +93,16 @@ router.get('/settings', (req, res) => {
       .forEach(row => { settings[row.key] = row.value; });
     res.json({ success: true, data: settings });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
 router.put('/settings', (req, res) => {
   try {
+    const parsed = settingsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+    }
     const stmt = db.prepare(
       'INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, ?, ?)'
     );
@@ -90,10 +110,10 @@ router.put('/settings', (req, res) => {
       for (const [key, value] of Object.entries(items)) {
         stmt.run(req.user.userId, key, String(value));
       }
-    })(req.body);
+    })(parsed.data);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -124,6 +144,13 @@ router.get('/', (req, res) => {
     const total = db.prepare(`SELECT COUNT(*) as cnt FROM transactions ${where}`)
       .get(...params).cnt;
 
+    // 不分页（备份、导出）时要一次取回全部，先确认没超过上限
+    if (page === undefined && total > MAX_BULK_ROWS) {
+      return res.status(400).json({
+        success: false, error: `记录超过 ${MAX_BULK_ROWS} 条，请缩小筛选范围后再试`,
+      });
+    }
+
     // 排序列走白名单，不能直接拼接用户输入
     const dir = order === 'asc' ? 'ASC' : 'DESC';
     const orderBy = sort === 'amount'
@@ -143,7 +170,7 @@ router.get('/', (req, res) => {
     const rows = db.prepare(sql).all(...params);
     res.json({ success: true, data: attachTags(rows), total });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -168,7 +195,7 @@ router.post('/', (req, res) => {
     attachTags([newRecord]);
     res.json({ success: true, data: newRecord });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -200,7 +227,7 @@ router.put('/:id', (req, res) => {
     attachTags([updated]);
     res.json({ success: true, data: updated });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -221,7 +248,7 @@ router.delete('/:id', (req, res) => {
     }
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -230,6 +257,9 @@ router.post('/batch', (req, res) => {
     const { records } = req.body;
     if (!Array.isArray(records) || records.length === 0) {
       return res.status(400).json({ success: false, error: '无有效记录' });
+    }
+    if (records.length > MAX_BULK_ROWS) {
+      return res.status(400).json({ success: false, error: `单次最多导入 ${MAX_BULK_ROWS} 条记录` });
     }
     // 逐条校验：一行脏数据只跳过自己，不连累整批导入。
     // 备份文件里多出的 id / created_at / user_id 会被 Zod 自动剥掉
@@ -269,7 +299,7 @@ router.post('/batch', (req, res) => {
       skipped: skipped.slice(0, 20), // 只回前 20 条，避免整批出错时响应过大
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -292,7 +322,7 @@ router.get('/stats/daily', (req, res) => {
 
     res.json({ success: true, data: { date: targetDate, income: income.total, expense: expense.total, balance: income.total - expense.total, records } });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -336,7 +366,7 @@ router.get('/stats/weekly', (req, res) => {
 
     res.json({ success: true, data: days });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -391,7 +421,7 @@ router.get('/stats/monthly', (req, res) => {
 
     res.json({ success: true, data: { daily, categories: pickCategories('expense'), incomeCategories: pickCategories('income'), totalIncome: totals.income, totalExpense: totals.expense, balance: totals.income - totals.expense } });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -437,7 +467,7 @@ router.get('/stats/yearly', (req, res) => {
 
     res.json({ success: true, data: { months, expenseCategories: top8('expense'), incomeCategories: top8('income') } });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -452,7 +482,7 @@ router.get('/stats/balance', (req, res) => {
     const totalExpense = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM transactions WHERE type='expense' AND user_id=?").get(uid);
     res.json({ success: true, data: { initialBalance, totalIncome: totalIncome.total, totalExpense: totalExpense.total, netBalance: initialBalance + totalIncome.total - totalExpense.total } });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -489,7 +519,7 @@ router.get('/stats/budget', (req, res) => {
 
     res.json({ success: true, data: { monthlyIncome, totalIncome: totalIncome.total, totalExpense: spent, remaining: monthlyIncome - spent, warnThreshold, dangerThreshold, status, message, progress: Math.min((spent / monthlyIncome) * 100, 100) } });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 

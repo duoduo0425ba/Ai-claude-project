@@ -32,6 +32,8 @@ cd client && npm run lint
 - Token 存储在 **`sessionStorage`**（关闭浏览器自动清除——有意为之）
 - `server/middleware/auth.js` 验证 Token 后**回查 `users` 表**，将 `{ userId, username, role }` 挂载到 `req.user`——role 以数据库为准，不信任载荷；用户已删除返回 401
 - **`users.token_version`**（`004_token_version.js`）：签 Token 时写入 `tokenVersion`，中间件比对不一致即 401。改密码必须 `token_version + 1`，这是让旧 Token 立即失效的唯一机制——将来加「管理员重置密码」之类的接口时同样要 +1
+- `jwt.verify` 限定 `algorithms: ['HS256']`
+- `/login`、`/register`、`/change-password` 有失败次数限流（`middleware/rateLimit.js`，内存实现）：15 分钟内失败 10 次即返回 429，成功请求不计数也不清零。登录按「IP + 用户名」、注册按 IP、改密按「IP + 用户 id」计数
 - `client/src/api/index.js` 自动注入 Token；401 响应时清除 Token 并跳转到 `/login`
 - `client/src/App.jsx` — `AuthLayout` 包裹所有路由，`/login` 和 `/register` 除外
 
@@ -78,6 +80,14 @@ cd client && npm run lint
 
 **响应格式：** `{ success: true, data: ... }` / `{ success: false, error: "..." }`
 
+**500 错误一律调用 `serverError(res, err)`**（`utils/serverError.js`）：详细错误只打印到服务端日志，响应固定为「服务器错误」。不要再写 `error: err.message`——SQLite 的原始报错会暴露表名、列名。`app.js` 末尾的兜底错误处理负责路由里没捕获的异常和非法 JSON 请求体，同样只返回 JSON。
+
+**查询参数只会是字符串**：`app.js` 自定义了 query parser，同名参数重复出现时只取第一个。默认解析器会把 `?type=a&type=b` 解析成数组，绑定进 SQL 直接报错。
+
+**`PUT /settings` 走白名单**（`settingsSchema`）：只接受 `monthly_income`、`warn_threshold`、`danger_threshold`、`initial_balance` 四个数字项，未知的键直接丢弃。新增设置项必须同步加进 schema。
+
+**不分页查询和 `/batch` 的上限是 `MAX_BULK_ROWS`（20000 条）**：前端的数据备份和导出 Excel 依赖「不传 `page` 就返回全部」，所以**不能**给列表加默认分页；超过上限直接报 400，绝不截断（截断的备份比没有备份更危险）。上限必须小于 SQLite 的绑定参数上限 32766，因为 `attachTags` 会把所有 id 放进一条 IN 查询。
+
 ### 前端（`client/src/`）— React 19 + Vite + React Router v7
 
 **页面：**
@@ -108,9 +118,10 @@ cd client && npm run lint
 ```
 server/
 ├── migrations/        # 001_initial_schema.js、002_category_budgets.js、…
-├── middleware/auth.js  # JWT 验证
+├── middleware/        # auth.js（JWT 验证 + 回查用户）、rateLimit.js（失败次数限流）
+├── utils/serverError.js  # 500 错误统一出口
 ├── routes/            # auth、transactions、categories、recurring、budgets、tags
-├── tests/             # Jest + Supertest（使用 DB_PATH=':memory:'）
+├── tests/             # Jest + Supertest（使用 DB_PATH=':memory:'）；鉴权相关用例在 auth.test.js
 ├── app.js             # Express app（供测试引入）
 ├── index.js           # 仅 HTTP 监听
 ├── migrate.js         # 迁移运行器
@@ -130,6 +141,10 @@ client/src/
 后端测试在 `require('app.js')` **之前**设置 `process.env.DB_PATH = ':memory:'`。`beforeAll` 中注册测试用户，所有请求携带 `Authorization` Header。
 
 新增迁移不需要额外测试配置——迁移在内存 DB 上自动执行。
+
+限流按 IP 计数，而测试里所有请求都来自同一个 IP：会触发限流的测试文件必须在 `afterEach` 里调用 `resetRateLimits()`（`middleware/rateLimit.js` 导出），否则一个用例触发的 429 会拦住后面的用例。测试里故意触发 500 时，用 `jest.spyOn(console, 'error').mockImplementation(() => {})` 屏蔽 `serverError` 打出的日志。
+
+**已知问题：全量测试偶尔（约 5%～10% 的运行）有随机用例失败**，常见表现是带有效 Token 的请求返回 401、或 `beforeEach` 里某次写入丢失。与业务代码无关：supertest 默认每个请求新开一个服务器、用完即关，在本机（macOS + Node 25）上偶尔会把新连接送到刚关闭的旧服务器上，只用 supertest 的最小实验也能复现（约万分之二的请求），关闭 keep-alive 也无效。遇到时先重跑确认能否复现，再怀疑代码。
 
 ## macOS 打包
 

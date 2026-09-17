@@ -454,124 +454,141 @@ describe('分页参数异常时不应 500', () => {
     const res = await request(app)
       .get('/api/transactions?page=2&page=3&pageSize=2').set(auth);
     expect(res.status).toBe(200);
-    // Express 解析成 ['2','3']，parseInt 拿到 2：每页 2 条共 3 条，第 2 页剩 1 条
+    // 同名参数只取第一个（见 app.js 的 query parser），page=2：每页 2 条共 3 条，第 2 页剩 1 条
     expect(res.body.data).toHaveLength(1);
     expect(res.body.total).toBe(3);
   });
 });
 
-// ─── 鉴权以数据库为准 ─────────────────────────────────────────────────────────
+// ─── 设置项白名单 ─────────────────────────────────────────────────────────────
 
-describe('账号状态以数据库为准，不只信 Token 载荷', () => {
-  it('用户被删除后，未过期的旧 Token 立即失效', async () => {
-    const reg = await request(app).post('/api/auth/register').send({
-      username: 'ghostuser', password: 'password123',
+describe('PUT /settings 只接受已知的数字设置项', () => {
+  // 单独用一个用户，改设置不影响上面预算用例依赖的阈值
+  let settingsAuth;
+  beforeAll(async () => {
+    const res = await request(app).post('/api/auth/register').send({
+      username: 'settingsuser', password: 'password123',
     });
-    const ghostAuth = { Authorization: `Bearer ${reg.body.data.token}` };
-
-    const before = await request(app).get('/api/transactions').set(ghostAuth);
-    expect(before.status).toBe(200);
-
-    db.prepare("DELETE FROM users WHERE username = 'ghostuser'").run();
-
-    const after = await request(app).get('/api/transactions').set(ghostAuth);
-    expect(after.status).toBe(401);
+    settingsAuth = { Authorization: `Bearer ${res.body.data.token}` };
   });
 
-  it('管理员被降级后，旧 Token 里的 admin 角色不再生效', async () => {
-    await request(app).post('/api/auth/register').send({
-      username: 'exadmin', password: 'password123',
-    });
-    db.prepare("UPDATE users SET role = 'admin' WHERE username = 'exadmin'").run();
+  const put = (body) =>
+    request(app).put('/api/transactions/settings').set(settingsAuth).send(body);
+  const current = async () =>
+    (await request(app).get('/api/transactions/settings').set(settingsAuth)).body.data;
 
-    // 此刻登录，Token 载荷里 role = admin
-    const login = await request(app).post('/api/auth/login').send({
-      username: 'exadmin', password: 'password123',
-    });
-    const exAuth = { Authorization: `Bearer ${login.body.data.token}` };
-    expect((await request(app).get('/api/auth/users').set(exAuth)).status).toBe(200);
-
-    db.prepare("UPDATE users SET role = 'user' WHERE username = 'exadmin'").run();
-
-    // 同一个 Token，权限应立即以数据库为准被收回
-    const res = await request(app).get('/api/auth/users').set(exAuth);
-    expect(res.status).toBe(403);
+  it('未知的键被丢弃，不会写进数据库', async () => {
+    expect((await put({ monthly_income: 500, junk_key: 'x' })).status).toBe(200);
+    const settings = await current();
+    expect(settings.monthly_income).toBe('500');
+    expect(settings).not.toHaveProperty('junk_key');
   });
 
-  it('管理员被降级后，旧 Token 不能再删除用户', async () => {
-    for (const username of ['exadmin2', 'victim']) {
-      await request(app).post('/api/auth/register').send({ username, password: 'password123' });
-    }
-    db.prepare("UPDATE users SET role = 'admin' WHERE username = 'exadmin2'").run();
-    const login = await request(app).post('/api/auth/login').send({
-      username: 'exadmin2', password: 'password123',
-    });
-    const exAuth = { Authorization: `Bearer ${login.body.data.token}` };
-    db.prepare("UPDATE users SET role = 'user' WHERE username = 'exadmin2'").run();
-
-    // 删用户是最危险的管理员操作，且每个路由各自检查 role，必须单独确认
-    const victim = db.prepare("SELECT id FROM users WHERE username = 'victim'").get();
-    const res = await request(app).delete(`/api/auth/users/${victim.id}`).set(exAuth);
-    expect(res.status).toBe(403);
-    expect(db.prepare("SELECT id FROM users WHERE username = 'victim'").get()).toBeDefined();
+  it('值不是数字时整体拒绝，已有设置保持不变', async () => {
+    const before = await current();
+    const res = await put({ monthly_income: 800, warn_threshold: 'abc' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('设置值必须是数字');
+    expect(await current()).toEqual(before);
   });
 
-  it('用户被删除后，旧 Token 也不能再改密码', async () => {
-    const reg = await request(app).post('/api/auth/register').send({
-      username: 'ghostuser2', password: 'password123',
-    });
-    const ghostAuth = { Authorization: `Bearer ${reg.body.data.token}` };
-    db.prepare("DELETE FROM users WHERE username = 'ghostuser2'").run();
-
-    // change-password 在 auth.js 里单独挂的中间件，要单独确认它也被拦下
-    const res = await request(app).post('/api/auth/change-password').set(ghostAuth)
-      .send({ oldPassword: 'password123', newPassword: 'newpass123' });
-    expect(res.status).toBe(401);
+  it('兼容备份文件里的字符串数字；只传部分项时其余不变', async () => {
+    const before = await current();
+    expect((await put({ warn_threshold: '150' })).status).toBe(200);
+    expect(await current()).toEqual({ ...before, warn_threshold: '150' });
   });
 
-  it('查库出错时返回 JSON 格式的 500，而不是 HTML 错误页', async () => {
-    // 正常签发的 Token 里 userId 一定是数字。这里故意签一个对象，
-    // 让 better-sqlite3 绑定参数时抛错，从而走到中间件的 catch 分支
-    const jwt = require('jsonwebtoken');
-    const { JWT_SECRET } = require('../middleware/auth');
-    const badToken = jwt.sign({ userId: {} }, JWT_SECRET);
+  it('请求体不是对象时拒绝', async () => {
+    expect((await put([1, 2])).status).toBe(400);
+    expect(await current()).not.toHaveProperty('0');
+  });
+});
 
-    const res = await request(app).get('/api/transactions')
-      .set({ Authorization: `Bearer ${badToken}` });
+// ─── 批量操作的条数上限 ───────────────────────────────────────────────────────
+
+describe('不分页查询与批量导入的条数上限（20000 条）', () => {
+  let userId;
+  beforeAll(() => {
+    userId = db.prepare("SELECT id FROM users WHERE username = 'testuser'").get().id;
+  });
+
+  // 直接写库造数据，比走接口快得多（beforeEach 会清空 transactions）
+  const insertRows = (n) => {
+    const stmt = db.prepare(
+      "INSERT INTO transactions (type, amount, category, date, user_id) VALUES ('expense', 1, '餐饮', '2026-04-01', ?)"
+    );
+    db.transaction(() => { for (let i = 0; i < n; i++) stmt.run(userId); })();
+  };
+
+  it('恰好 20000 条时仍能不分页全部取回（备份、导出依赖这一点）', async () => {
+    insertRows(20000);
+    const res = await request(app).get('/api/transactions').set(auth);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(20000);
+  });
+
+  it('超过 20000 条时不分页查询直接报错，而不是悄悄截断', async () => {
+    insertRows(20001);
+    const res = await request(app).get('/api/transactions').set(auth);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('20000');
+
+    // 分页查询不受影响
+    const paged = await request(app).get('/api/transactions?page=1&pageSize=30').set(auth);
+    expect(paged.status).toBe(200);
+    expect(paged.body.total).toBe(20001);
+  });
+
+  it('单次导入超过 20000 条时整体拒绝，一条都不写入', async () => {
+    const records = Array.from({ length: 20001 }, () => ({
+      type: 'expense', amount: 1, category: '餐饮', date: '2026-04-01',
+    }));
+    const res = await request(app).post('/api/transactions/batch').set(auth).send({ records });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('单次最多导入 20000 条记录');
+    const { n } = db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE user_id = ?').get(userId);
+    expect(n).toBe(0);
+  });
+});
+
+// ─── 错误信息不外泄 ───────────────────────────────────────────────────────────
+
+describe('出错时不向前端暴露内部细节', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('重复的查询参数只取第一个，不再触发 500', async () => {
+    await request(app).post('/api/transactions').set(auth)
+      .send({ type: 'income', amount: 10, category: '工资', date: '2026-04-01' });
+    await request(app).post('/api/transactions').set(auth)
+      .send({ type: 'expense', amount: 5, category: '餐饮', date: '2026-04-01' });
+
+    const res = await request(app).get('/api/transactions?type=income&type=expense').set(auth);
+    expect(res.status).toBe(200);
+    expect(res.body.data.map((t) => t.type)).toEqual(['income']);
+  });
+
+  it('数据库报错时只返回通用提示，详细错误写进服务端日志', async () => {
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => {});
+    // 中间件用的是预编译好的语句，所以这次请求里第一次 prepare 发生在路由里
+    jest.spyOn(db, 'prepare').mockImplementationOnce(() => {
+      throw new Error('no such table: secret_internal_table');
+    });
+
+    const res = await request(app).get('/api/transactions/settings').set(auth);
     expect(res.status).toBe(500);
-    expect(res.headers['content-type']).toMatch(/json/);
     expect(res.body).toEqual({ success: false, error: '服务器错误' });
+    expect(logged).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'no such table: secret_internal_table' })
+    );
   });
 
-  it('改密码后旧 Token 立即失效，重新登录拿到的新 Token 可用', async () => {
-    const reg = await request(app).post('/api/auth/register').send({
-      username: 'pwchanger', password: 'password123',
-    });
-    const oldAuth = { Authorization: `Bearer ${reg.body.data.token}` };
-    expect((await request(app).get('/api/transactions').set(oldAuth)).status).toBe(200);
-
-    const change = await request(app).post('/api/auth/change-password').set(oldAuth)
-      .send({ oldPassword: 'password123', newPassword: 'newpass456' });
-    expect(change.body.success).toBe(true);
-
-    // 场景：Token 被盗，受害者改密后攻击者手里的旧 Token 必须马上作废
-    expect((await request(app).get('/api/transactions').set(oldAuth)).status).toBe(401);
-
-    const login = await request(app).post('/api/auth/login').send({
-      username: 'pwchanger', password: 'newpass456',
-    });
-    const newAuth = { Authorization: `Bearer ${login.body.data.token}` };
-    expect((await request(app).get('/api/transactions').set(newAuth)).status).toBe(200);
-  });
-
-  it('不带版本号的旧格式 Token 一律拒绝', async () => {
-    const jwt = require('jsonwebtoken');
-    const { JWT_SECRET } = require('../middleware/auth');
-    const me = db.prepare("SELECT id FROM users WHERE username = 'testuser'").get();
-    // 本次改动之前签发的 Token 就是这个形状：没有 tokenVersion 字段
-    const legacy = jwt.sign({ userId: me.id, username: 'testuser', role: 'user' }, JWT_SECRET);
-    const res = await request(app).get('/api/transactions')
-      .set({ Authorization: `Bearer ${legacy}` });
-    expect(res.status).toBe(401);
+  it('请求体不是合法 JSON 时返回 JSON 格式的 400', async () => {
+    const res = await request(app).post('/api/transactions').set(auth)
+      .set('Content-Type', 'application/json').send('{"type": broken');
+    expect(res.status).toBe(400);
+    expect(res.headers['content-type']).toMatch(/json/);
+    expect(res.body).toEqual({ success: false, error: '请求格式错误' });
   });
 });

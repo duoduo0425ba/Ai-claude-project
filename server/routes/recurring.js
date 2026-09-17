@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const serverError = require('../utils/serverError');
 const { z } = require('zod');
 
 function formatLocalDate(date = new Date()) {
@@ -33,7 +34,7 @@ router.get('/', (req, res) => {
     ).all(req.user.userId);
     res.json({ success: true, data: templates });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -62,7 +63,7 @@ router.post('/', (req, res) => {
       .get(result.lastInsertRowid);
     res.json({ success: true, data: template });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -76,7 +77,7 @@ router.delete('/:id', (req, res) => {
     }
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -96,7 +97,7 @@ router.patch('/:id', (req, res) => {
       .get(req.params.id);
     res.json({ success: true, data: template });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -137,7 +138,7 @@ router.post('/generate', (req, res) => {
     }
     res.json({ success: true, generated });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 

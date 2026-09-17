@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const serverError = require('../utils/serverError');
 
 // GET /api/budgets — 获取当前用户所有分类预算
 router.get('/', (req, res) => {
@@ -9,7 +10,7 @@ router.get('/', (req, res) => {
     const rows = db.prepare('SELECT category, amount FROM category_budgets WHERE user_id = ? ORDER BY category').all(uid);
     res.json({ success: true, data: rows });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -66,7 +67,7 @@ router.get('/status', (req, res) => {
 
     res.json({ success: true, data });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -86,7 +87,7 @@ router.put('/:category', (req, res) => {
     `).run(uid, category, amount);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -98,7 +99,7 @@ router.delete('/:category', (req, res) => {
     db.prepare('DELETE FROM category_budgets WHERE user_id = ? AND category = ?').run(uid, category);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    serverError(res, err);
   }
 });
 

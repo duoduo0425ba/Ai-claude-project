@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const db = require('../db');
+const serverError = require('../utils/serverError');
 
 const SECRET_FILE = path.join(__dirname, '..', '.jwt-secret');
 
@@ -41,7 +42,8 @@ module.exports = function authMiddleware(req, res, next) {
 
   let payload;
   try {
-    payload = jwt.verify(header.slice(7), JWT_SECRET);
+    // 显式限定算法：签发只用 HS256，其他算法签的 Token 一律视为无效
+    payload = jwt.verify(header.slice(7), JWT_SECRET, { algorithms: ['HS256'] });
   } catch {
     return res.status(401).json({ success: false, error: 'Token 无效或已过期' });
   }
@@ -51,9 +53,9 @@ module.exports = function authMiddleware(req, res, next) {
   let user;
   try {
     user = findUserStmt.get(payload.userId);
-  } catch {
+  } catch (err) {
     // 数据库故障也要按约定返回 JSON，不能漏成 Express 默认的 HTML 错误页
-    return res.status(500).json({ success: false, error: '服务器错误' });
+    return serverError(res, err);
   }
   if (!user) {
     return res.status(401).json({ success: false, error: '账号不存在，请重新登录' });
