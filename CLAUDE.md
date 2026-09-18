@@ -124,7 +124,7 @@ server/
 ├── middleware/        # auth.js（JWT 验证 + 回查用户）、rateLimit.js（失败次数限流）
 ├── utils/serverError.js  # 500 错误统一出口
 ├── routes/            # auth、transactions、categories、recurring、budgets、tags
-├── tests/             # Jest + Supertest（使用 DB_PATH=':memory:'）；鉴权相关用例在 auth.test.js
+├── tests/             # Jest + Supertest（使用 DB_PATH=':memory:'）；helpers/api.js 是发请求的统一入口，鉴权用例在 auth.test.js
 ├── app.js             # Express app（供测试引入）
 ├── index.js           # 仅 HTTP 监听
 ├── migrate.js         # 迁移运行器
@@ -147,7 +147,7 @@ client/src/
 
 限流按 IP 计数，而测试里所有请求都来自同一个 IP：会触发限流的测试文件必须在 `afterEach` 里调用 `resetRateLimits()`（`middleware/rateLimit.js` 导出），否则一个用例触发的 429 会拦住后面的用例。测试里故意触发 500 时，用 `jest.spyOn(console, 'error').mockImplementation(() => {})` 屏蔽 `serverError` 打出的日志。
 
-**已知问题：全量测试偶尔（约 5%～10% 的运行）有随机用例失败**，常见表现是带有效 Token 的请求返回 401、或 `beforeEach` 里某次写入丢失。与业务代码无关：supertest 默认每个请求新开一个服务器、用完即关，在本机（macOS + Node 25）上偶尔会把新连接送到刚关闭的旧服务器上，只用 supertest 的最小实验也能复现（约万分之二的请求），关闭 keep-alive 也无效。遇到时先重跑确认能否复现，再怀疑代码。
+**发请求一律走 `tests/helpers/api.js`**：`const api = require('./helpers/api')(app)`，然后 `api.get(...)` / `api.post(...)`。不要直接用 supertest 的 `request(app)`——它每个请求都新开一个服务器、用完即关，在本机（macOS + Node 25）上偶尔会把新连接送到刚关闭的旧服务器，曾造成约 5% 的全量运行随机失败（带有效 Token 却 401、`beforeEach` 的写入丢失）。helper 让每个测试文件只启动一个服务器、所有请求共用，也快了不少。
 
 ## macOS 打包
 

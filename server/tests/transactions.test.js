@@ -1,13 +1,13 @@
 process.env.DB_PATH = ':memory:';
 
-const request = require('supertest');
 const app = require('../app');
+const api = require('./helpers/api')(app);
 const db = require('../db');
 
 let auth; // Authorization 请求头
 
 beforeAll(async () => {
-  const res = await request(app).post('/api/auth/register').send({
+  const res = await api.post('/api/auth/register').send({
     username: 'testuser', password: 'password123',
   });
   auth = { Authorization: `Bearer ${res.body.data.token}` };
@@ -25,7 +25,7 @@ afterAll(() => {
 
 describe('POST /api/transactions', () => {
   it('成功创建一条支出记录', async () => {
-    const res = await request(app).post('/api/transactions').set(auth)
+    const res = await api.post('/api/transactions').set(auth)
       .send({ type: 'expense', amount: 55, category: '餐饮', emoji: '🍜', date: '2026-04-26' });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -33,26 +33,26 @@ describe('POST /api/transactions', () => {
   });
 
   it('拒绝无效 type', async () => {
-    const res = await request(app).post('/api/transactions').set(auth)
+    const res = await api.post('/api/transactions').set(auth)
       .send({ type: 'other', amount: 10, category: '餐饮', date: '2026-04-26' });
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
   });
 
   it('拒绝负数金额', async () => {
-    const res = await request(app).post('/api/transactions').set(auth)
+    const res = await api.post('/api/transactions').set(auth)
       .send({ type: 'expense', amount: -10, category: '餐饮', date: '2026-04-26' });
     expect(res.status).toBe(400);
   });
 
   it('拒绝格式错误的日期', async () => {
-    const res = await request(app).post('/api/transactions').set(auth)
+    const res = await api.post('/api/transactions').set(auth)
       .send({ type: 'expense', amount: 10, category: '餐饮', date: '20260426' });
     expect(res.status).toBe(400);
   });
 
   it('未登录时返回 401', async () => {
-    const res = await request(app).post('/api/transactions')
+    const res = await api.post('/api/transactions')
       .send({ type: 'expense', amount: 10, category: '餐饮', date: '2026-04-26' });
     expect(res.status).toBe(401);
   });
@@ -63,25 +63,25 @@ describe('POST /api/transactions', () => {
 describe('GET /api/transactions 分页', () => {
   beforeEach(async () => {
     for (let i = 1; i <= 5; i++) {
-      await request(app).post('/api/transactions').set(auth)
+      await api.post('/api/transactions').set(auth)
         .send({ type: 'expense', amount: i * 10, category: '测试', date: `2026-04-${String(i).padStart(2,'0')}` });
     }
   });
 
   it('不传 page 时返回全部记录', async () => {
-    const res = await request(app).get('/api/transactions').set(auth);
+    const res = await api.get('/api/transactions').set(auth);
     expect(res.body.data).toHaveLength(5);
     expect(res.body.total).toBe(5);
   });
 
   it('第 1 页返回 2 条', async () => {
-    const res = await request(app).get('/api/transactions?page=1&pageSize=2').set(auth);
+    const res = await api.get('/api/transactions?page=1&pageSize=2').set(auth);
     expect(res.body.data).toHaveLength(2);
     expect(res.body.total).toBe(5);
   });
 
   it('第 3 页返回 1 条', async () => {
-    const res = await request(app).get('/api/transactions?page=3&pageSize=2').set(auth);
+    const res = await api.get('/api/transactions?page=3&pageSize=2').set(auth);
     expect(res.body.data).toHaveLength(1);
   });
 });
@@ -98,36 +98,36 @@ describe('GET /api/transactions 排序', () => {
       { amount: 20, date: '2026-04-04' },
     ];
     for (const r of rows) {
-      await request(app).post('/api/transactions').set(auth)
+      await api.post('/api/transactions').set(auth)
         .send({ type: 'expense', category: '测试', ...r });
     }
   });
 
   it('默认按日期倒序', async () => {
-    const res = await request(app).get('/api/transactions').set(auth);
+    const res = await api.get('/api/transactions').set(auth);
     expect(res.body.data.map((t) => t.date))
       .toEqual(['2026-04-04', '2026-04-03', '2026-04-02', '2026-04-01']);
   });
 
   it('金额降序', async () => {
-    const res = await request(app).get('/api/transactions?sort=amount&order=desc').set(auth);
+    const res = await api.get('/api/transactions?sort=amount&order=desc').set(auth);
     expect(res.body.data.map((t) => t.amount)).toEqual([50, 30, 20, 10]);
   });
 
   it('金额升序', async () => {
-    const res = await request(app).get('/api/transactions?sort=amount&order=asc').set(auth);
+    const res = await api.get('/api/transactions?sort=amount&order=asc').set(auth);
     expect(res.body.data.map((t) => t.amount)).toEqual([10, 20, 30, 50]);
   });
 
   it('金额排序跨分页仍然正确', async () => {
-    const res = await request(app)
+    const res = await api
       .get('/api/transactions?sort=amount&order=desc&page=1&pageSize=2').set(auth);
     expect(res.body.data.map((t) => t.amount)).toEqual([50, 30]);
     expect(res.body.total).toBe(4);
   });
 
   it('非法 sort 值回退到默认排序', async () => {
-    const res = await request(app)
+    const res = await api
       .get('/api/transactions?sort=amount;DROP TABLE transactions&order=x').set(auth);
     expect(res.status).toBe(200);
     expect(res.body.data.map((t) => t.date))
@@ -139,21 +139,21 @@ describe('GET /api/transactions 排序', () => {
 
 describe('GET /api/transactions/stats/daily', () => {
   beforeEach(async () => {
-    await request(app).post('/api/transactions').set(auth)
+    await api.post('/api/transactions').set(auth)
       .send({ type: 'income', amount: 100, category: '零花钱', date: '2026-04-26' });
-    await request(app).post('/api/transactions').set(auth)
+    await api.post('/api/transactions').set(auth)
       .send({ type: 'expense', amount: 30, category: '餐饮', date: '2026-04-26' });
   });
 
   it('正确返回当日收支和结余', async () => {
-    const res = await request(app).get('/api/transactions/stats/daily?date=2026-04-26').set(auth);
+    const res = await api.get('/api/transactions/stats/daily?date=2026-04-26').set(auth);
     expect(res.body.data.income).toBe(100);
     expect(res.body.data.expense).toBe(30);
     expect(res.body.data.balance).toBe(70);
   });
 
   it('其他日期返回 0', async () => {
-    const res = await request(app).get('/api/transactions/stats/daily?date=2026-04-25').set(auth);
+    const res = await api.get('/api/transactions/stats/daily?date=2026-04-25').set(auth);
     expect(res.body.data.income).toBe(0);
     expect(res.body.data.expense).toBe(0);
   });
@@ -164,7 +164,7 @@ describe('GET /api/transactions/stats/daily', () => {
 // 2026-04-20 是周一，2026-04-26 是周日，属于同一周
 describe('GET /api/transactions/stats/weekly', () => {
   beforeEach(async () => {
-    const add = (t) => request(app).post('/api/transactions').set(auth).send(t);
+    const add = (t) => api.post('/api/transactions').set(auth).send(t);
     await add({ type: 'income',  amount: 100, category: '零花钱', date: '2026-04-20' }); // 周一
     await add({ type: 'expense', amount: 30,  category: '餐饮',   date: '2026-04-20' }); // 周一
     await add({ type: 'expense', amount: 12,  category: '餐饮',   date: '2026-04-20' }); // 周一，同日同类型
@@ -173,7 +173,7 @@ describe('GET /api/transactions/stats/weekly', () => {
   });
 
   it('返回周一到周日 7 天，日期和标签对齐', async () => {
-    const res = await request(app).get('/api/transactions/stats/weekly?date=2026-04-22').set(auth);
+    const res = await api.get('/api/transactions/stats/weekly?date=2026-04-22').set(auth);
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(7);
     expect(res.body.data[0]).toMatchObject({ date: '2026-04-20', dayLabel: '周一' });
@@ -181,19 +181,19 @@ describe('GET /api/transactions/stats/weekly', () => {
   });
 
   it('同日同类型的多条记录被合计', async () => {
-    const res = await request(app).get('/api/transactions/stats/weekly?date=2026-04-22').set(auth);
+    const res = await api.get('/api/transactions/stats/weekly?date=2026-04-22').set(auth);
     expect(res.body.data[0].income).toBe(100);
     expect(res.body.data[0].expense).toBe(42); // 30 + 12
   });
 
   it('没有记录的日子返回 0 而不是 null', async () => {
-    const res = await request(app).get('/api/transactions/stats/weekly?date=2026-04-22').set(auth);
+    const res = await api.get('/api/transactions/stats/weekly?date=2026-04-22').set(auth);
     expect(res.body.data[1]).toMatchObject({ date: '2026-04-21', income: 0, expense: 0 });
     expect(res.body.data[2]).toMatchObject({ date: '2026-04-22', income: 0, expense: 8 });
   });
 
   it('传入周日时回退到本周一，不跨到下一周', async () => {
-    const res = await request(app).get('/api/transactions/stats/weekly?date=2026-04-26').set(auth);
+    const res = await api.get('/api/transactions/stats/weekly?date=2026-04-26').set(auth);
     expect(res.body.data[0].date).toBe('2026-04-20');
     expect(res.body.data[6].date).toBe('2026-04-26');
     // 2026-04-27 的 99 元属于下一周，本周总支出应为 30+12+8
@@ -202,13 +202,13 @@ describe('GET /api/transactions/stats/weekly', () => {
   });
 
   it('不统计其他用户的记录', async () => {
-    const reg = await request(app).post('/api/auth/register')
+    const reg = await api.post('/api/auth/register')
       .send({ username: 'weeklyother', password: 'password123' });
     const otherAuth = { Authorization: `Bearer ${reg.body.data.token}` };
-    await request(app).post('/api/transactions').set(otherAuth)
+    await api.post('/api/transactions').set(otherAuth)
       .send({ type: 'expense', amount: 500, category: '餐饮', date: '2026-04-20' });
 
-    const res = await request(app).get('/api/transactions/stats/weekly?date=2026-04-22').set(auth);
+    const res = await api.get('/api/transactions/stats/weekly?date=2026-04-22').set(auth);
     expect(res.body.data[0].expense).toBe(42); // 不含对方的 500
   });
 });
@@ -217,7 +217,7 @@ describe('GET /api/transactions/stats/weekly', () => {
 
 describe('POST /api/transactions/batch', () => {
   const batch = (records) =>
-    request(app).post('/api/transactions/batch').set(auth).send({ records });
+    api.post('/api/transactions/batch').set(auth).send({ records });
 
   const ok = { type: 'expense', amount: 30, category: '餐饮', emoji: '🍜', date: '2026-04-26' };
 
@@ -271,14 +271,14 @@ describe('POST /api/transactions/batch', () => {
   it('备份恢复：带 id / created_at / user_id 的整行能正常导入', async () => {
     const res = await batch([{ ...ok, id: 999, created_at: '2026-04-26 10:00:00', user_id: 4242 }]);
     expect(res.body.imported).toBe(1);
-    const list = await request(app).get('/api/transactions').set(auth);
+    const list = await api.get('/api/transactions').set(auth);
     expect(list.body.data[0].id).not.toBe(999); // id 由数据库重新分配
     expect(list.body.data[0].amount).toBe(30);
   });
 
   it('缺省的 emoji / note 落库为空字符串', async () => {
     await batch([{ type: 'income', amount: 50, category: '零花钱', date: '2026-04-26' }]);
-    const list = await request(app).get('/api/transactions').set(auth);
+    const list = await api.get('/api/transactions').set(auth);
     expect(list.body.data[0].emoji).toBe('');
     expect(list.body.data[0].note).toBe('');
   });
@@ -286,7 +286,7 @@ describe('POST /api/transactions/batch', () => {
   it('金额是字符串时被转成数字', async () => {
     const res = await batch([{ ...ok, amount: '38.5' }]);
     expect(res.body.imported).toBe(1);
-    const list = await request(app).get('/api/transactions').set(auth);
+    const list = await api.get('/api/transactions').set(auth);
     expect(list.body.data[0].amount).toBe(38.5);
   });
 
@@ -300,7 +300,7 @@ describe('POST /api/transactions/batch', () => {
 
 describe('GET /api/transactions/stats/monthly 与 /stats/yearly', () => {
   beforeEach(async () => {
-    const add = (t) => request(app).post('/api/transactions').set(auth).send(t);
+    const add = (t) => api.post('/api/transactions').set(auth).send(t);
     await add({ type: 'income',  amount: 100, category: '零花钱', date: '2026-04-20' });
     await add({ type: 'expense', amount: 30,  category: '餐饮',   date: '2026-04-20' });
     await add({ type: 'expense', amount: 12,  category: '餐饮',   date: '2026-04-20' }); // 同日同类型
@@ -310,8 +310,8 @@ describe('GET /api/transactions/stats/monthly 与 /stats/yearly', () => {
     await add({ type: 'expense', amount: 777, category: '餐饮',   date: '2025-12-31' }); // 上一年
   });
 
-  const monthly = (q) => request(app).get(`/api/transactions/stats/monthly?${q}`).set(auth);
-  const yearly  = (q) => request(app).get(`/api/transactions/stats/yearly?${q}`).set(auth);
+  const monthly = (q) => api.get(`/api/transactions/stats/monthly?${q}`).set(auth);
+  const yearly  = (q) => api.get(`/api/transactions/stats/yearly?${q}`).set(auth);
 
   it('daily 覆盖当月每一天，空白日补 0', async () => {
     const res = await monthly('year=2026&month=4');
@@ -378,7 +378,7 @@ describe('GET /api/transactions/stats/monthly 与 /stats/yearly', () => {
 
   it('yearly 分类排行最多返回 8 条', async () => {
     for (let i = 1; i <= 10; i++) {
-      await request(app).post('/api/transactions').set(auth)
+      await api.post('/api/transactions').set(auth)
         .send({ type: 'expense', amount: i, category: `分类${i}`, date: '2026-06-15' });
     }
     const res = await yearly('year=2026');
@@ -386,10 +386,10 @@ describe('GET /api/transactions/stats/monthly 与 /stats/yearly', () => {
   });
 
   it('不统计其他用户的记录', async () => {
-    const reg = await request(app).post('/api/auth/register')
+    const reg = await api.post('/api/auth/register')
       .send({ username: 'monthlyother', password: 'password123' });
     const otherAuth = { Authorization: `Bearer ${reg.body.data.token}` };
-    await request(app).post('/api/transactions').set(otherAuth)
+    await api.post('/api/transactions').set(otherAuth)
       .send({ type: 'expense', amount: 500, category: '餐饮', date: '2026-04-20' });
 
     const res = await monthly('year=2026&month=4');
@@ -402,24 +402,24 @@ describe('GET /api/transactions/stats/monthly 与 /stats/yearly', () => {
 
 describe('GET /api/transactions/stats/budget', () => {
   it('支出低于警戒线时返回 safe', async () => {
-    await request(app).post('/api/transactions').set(auth)
+    await api.post('/api/transactions').set(auth)
       .send({ type: 'expense', amount: 50, category: '餐饮', date: '2026-04-26' });
-    const res = await request(app).get('/api/transactions/stats/budget?year=2026&month=4').set(auth);
+    const res = await api.get('/api/transactions/stats/budget?year=2026&month=4').set(auth);
     expect(res.body.data.status).toBe('safe');
     expect(res.body.data.totalExpense).toBe(50);
   });
 
   it('超过预警阈值返回 warn', async () => {
-    await request(app).post('/api/transactions').set(auth)
+    await api.post('/api/transactions').set(auth)
       .send({ type: 'expense', amount: 220, category: '娱乐', date: '2026-04-26' });
-    const res = await request(app).get('/api/transactions/stats/budget?year=2026&month=4').set(auth);
+    const res = await api.get('/api/transactions/stats/budget?year=2026&month=4').set(auth);
     expect(res.body.data.status).toBe('warn');
   });
 
   it('超过危险阈值返回 danger', async () => {
-    await request(app).post('/api/transactions').set(auth)
+    await api.post('/api/transactions').set(auth)
       .send({ type: 'expense', amount: 280, category: '娱乐', date: '2026-04-26' });
-    const res = await request(app).get('/api/transactions/stats/budget?year=2026&month=4').set(auth);
+    const res = await api.get('/api/transactions/stats/budget?year=2026&month=4').set(auth);
     expect(res.body.data.status).toBe('danger');
   });
 });
@@ -429,13 +429,13 @@ describe('GET /api/transactions/stats/budget', () => {
 describe('分页参数异常时不应 500', () => {
   beforeEach(async () => {
     for (const d of ['2026-04-01', '2026-04-02', '2026-04-03']) {
-      await request(app).post('/api/transactions').set(auth)
+      await api.post('/api/transactions').set(auth)
         .send({ type: 'expense', amount: 10, category: '餐饮', date: d });
     }
   });
 
   it.each(['abc', '', '-5', '0'])('page=%s 回落到第 1 页', async (page) => {
-    const res = await request(app)
+    const res = await api
       .get(`/api/transactions?page=${page}&pageSize=2`).set(auth);
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(2);
@@ -443,7 +443,7 @@ describe('分页参数异常时不应 500', () => {
   });
 
   it('超大 page 不会 500，只是返回空列表', async () => {
-    const res = await request(app)
+    const res = await api
       .get(`/api/transactions?page=${'9'.repeat(400)}&pageSize=2`).set(auth);
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual([]);
@@ -451,7 +451,7 @@ describe('分页参数异常时不应 500', () => {
   });
 
   it('page 传成数组（?page=2&page=3）也能正常分页', async () => {
-    const res = await request(app)
+    const res = await api
       .get('/api/transactions?page=2&page=3&pageSize=2').set(auth);
     expect(res.status).toBe(200);
     // 同名参数只取第一个（见 app.js 的 query parser），page=2：每页 2 条共 3 条，第 2 页剩 1 条
@@ -466,16 +466,16 @@ describe('PUT /settings 只接受已知的数字设置项', () => {
   // 单独用一个用户，改设置不影响上面预算用例依赖的阈值
   let settingsAuth;
   beforeAll(async () => {
-    const res = await request(app).post('/api/auth/register').send({
+    const res = await api.post('/api/auth/register').send({
       username: 'settingsuser', password: 'password123',
     });
     settingsAuth = { Authorization: `Bearer ${res.body.data.token}` };
   });
 
   const put = (body) =>
-    request(app).put('/api/transactions/settings').set(settingsAuth).send(body);
+    api.put('/api/transactions/settings').set(settingsAuth).send(body);
   const current = async () =>
-    (await request(app).get('/api/transactions/settings').set(settingsAuth)).body.data;
+    (await api.get('/api/transactions/settings').set(settingsAuth)).body.data;
 
   it('未知的键被丢弃，不会写进数据库', async () => {
     expect((await put({ monthly_income: 500, junk_key: 'x' })).status).toBe(200);
@@ -522,19 +522,19 @@ describe('不分页查询与批量导入的条数上限（20000 条）', () => {
 
   it('恰好 20000 条时仍能不分页全部取回（备份、导出依赖这一点）', async () => {
     insertRows(20000);
-    const res = await request(app).get('/api/transactions').set(auth);
+    const res = await api.get('/api/transactions').set(auth);
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(20000);
   });
 
   it('超过 20000 条时不分页查询直接报错，而不是悄悄截断', async () => {
     insertRows(20001);
-    const res = await request(app).get('/api/transactions').set(auth);
+    const res = await api.get('/api/transactions').set(auth);
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('20000');
 
     // 分页查询不受影响
-    const paged = await request(app).get('/api/transactions?page=1&pageSize=30').set(auth);
+    const paged = await api.get('/api/transactions?page=1&pageSize=30').set(auth);
     expect(paged.status).toBe(200);
     expect(paged.body.total).toBe(20001);
   });
@@ -543,7 +543,7 @@ describe('不分页查询与批量导入的条数上限（20000 条）', () => {
     const records = Array.from({ length: 20001 }, () => ({
       type: 'expense', amount: 1, category: '餐饮', date: '2026-04-01',
     }));
-    const res = await request(app).post('/api/transactions/batch').set(auth).send({ records });
+    const res = await api.post('/api/transactions/batch').set(auth).send({ records });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('单次最多导入 20000 条记录');
     const { n } = db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE user_id = ?').get(userId);
@@ -559,12 +559,12 @@ describe('出错时不向前端暴露内部细节', () => {
   });
 
   it('重复的查询参数只取第一个，不再触发 500', async () => {
-    await request(app).post('/api/transactions').set(auth)
+    await api.post('/api/transactions').set(auth)
       .send({ type: 'income', amount: 10, category: '工资', date: '2026-04-01' });
-    await request(app).post('/api/transactions').set(auth)
+    await api.post('/api/transactions').set(auth)
       .send({ type: 'expense', amount: 5, category: '餐饮', date: '2026-04-01' });
 
-    const res = await request(app).get('/api/transactions?type=income&type=expense').set(auth);
+    const res = await api.get('/api/transactions?type=income&type=expense').set(auth);
     expect(res.status).toBe(200);
     expect(res.body.data.map((t) => t.type)).toEqual(['income']);
   });
@@ -576,7 +576,7 @@ describe('出错时不向前端暴露内部细节', () => {
       throw new Error('no such table: secret_internal_table');
     });
 
-    const res = await request(app).get('/api/transactions/settings').set(auth);
+    const res = await api.get('/api/transactions/settings').set(auth);
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ success: false, error: '服务器错误' });
     expect(logged).toHaveBeenCalledWith(
@@ -585,7 +585,7 @@ describe('出错时不向前端暴露内部细节', () => {
   });
 
   it('请求体不是合法 JSON 时返回 JSON 格式的 400', async () => {
-    const res = await request(app).post('/api/transactions').set(auth)
+    const res = await api.post('/api/transactions').set(auth)
       .set('Content-Type', 'application/json').send('{"type": broken');
     expect(res.status).toBe(400);
     expect(res.headers['content-type']).toMatch(/json/);
