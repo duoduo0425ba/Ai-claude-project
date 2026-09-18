@@ -36,9 +36,15 @@ app.use('/api/budgets',   authMiddleware, budgetsRouter);
 app.use('/api/tags',      authMiddleware, tagsRouter);
 
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../client/dist')));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/dist/index.html'));
+  // 前端构建产物目录；测试用 CLIENT_DIST 指向一个临时目录，不依赖是否已构建
+  const distDir = path.resolve(__dirname, process.env.CLIENT_DIST || '../client/dist');
+  app.use(express.static(distDir));
+  // 其余 GET 请求都返回 index.html，交给前端路由处理（直接打开或刷新 /list、/report 也能进页面）。
+  // Express 5 不再接受 '*'，通配符必须命名：'/{*splat}' 连根路径一起匹配
+  app.get('/{*splat}', (req, res, next) => {
+    // 不存在的接口照常 404，不能把网页当成接口响应返回
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(path.join(distDir, 'index.html'));
   });
 }
 

@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # 根目录 — 同时启动服务端（5001）和客户端（5173）
 npm run dev
 npm run build          # 仅构建前端（生产模式）
+cd server && NODE_ENV=production node index.js   # 生产模式：后端同时托管 client/dist
 
 # 后端测试（Jest + Supertest，内存 SQLite）
 cd server && npm test
@@ -81,6 +82,8 @@ cd client && npm run lint
 **响应格式：** `{ success: true, data: ... }` / `{ success: false, error: "..." }`
 
 **500 错误一律调用 `serverError(res, err)`**（`utils/serverError.js`）：详细错误只打印到服务端日志，响应固定为「服务器错误」。不要再写 `error: err.message`——SQLite 的原始报错会暴露表名、列名。`app.js` 末尾的兜底错误处理负责路由里没捕获的异常和非法 JSON 请求体，同样只返回 JSON。
+
+**生产模式的 SPA 回退路由写 `app.get('/{*splat}', …)`**：Express 5 的 path-to-regexp 要求通配符必须命名，写 `app.get('*')` 会在加载时直接抛 PathError（曾让生产模式一启动就崩溃）。回退只处理非 `/api/` 的 GET，不存在的接口照常 404。构建产物目录可用环境变量 `CLIENT_DIST` 覆盖，`tests/production.test.js` 靠它指向临时目录、不依赖是否已 `npm run build`。
 
 **查询参数只会是字符串**：`app.js` 自定义了 query parser，同名参数重复出现时只取第一个。默认解析器会把 `?type=a&type=b` 解析成数组，绑定进 SQL 直接报错。
 
