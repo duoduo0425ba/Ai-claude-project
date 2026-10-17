@@ -144,6 +144,54 @@ describe('账号状态以数据库为准，不只信 Token 载荷', () => {
   });
 });
 
+// ─── 管理员删除用户 ───────────────────────────────────────────────────────────
+
+describe('管理员删除用户', () => {
+  // 所有带 user_id 列的表（全库没有外键，删除用户要逐表清理）
+  const userTables = () => db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()
+    .map((t) => t.name)
+    .filter((name) => db.prepare(`PRAGMA table_info(${name})`).all().some((c) => c.name === 'user_id'));
+  const rowsOf = (table, userId) =>
+    db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = ?`).get(userId).n;
+
+  it('该用户在所有表里的数据都被清掉，不影响其他用户', async () => {
+    const { auth: adminAuth } = await signup('cascade_admin');
+    db.prepare("UPDATE users SET role = 'admin' WHERE username = 'cascade_admin'").run();
+    const { id: victimId, auth } = await signup('cascade_victim');
+    const { id: keeperId, auth: keeperAuth } = await signup('cascade_keeper');
+
+    // 两个用户都往每张表里写点东西（分类和设置在注册时已自动生成）
+    for (const a of [auth, keeperAuth]) {
+      await api.post('/api/transactions').set(a)
+        .send({ type: 'expense', amount: 10, category: '餐饮', date: '2026-10-01', tags: ['午饭'] });
+      await api.put(`/api/budgets/${encodeURIComponent('餐饮')}`).set(a).send({ amount: 50 });
+      await api.post('/api/recurring').set(a)
+        .send({ type: 'expense', amount: 15, category: '早餐', frequency: 'monthly', day_of_month: 1 });
+    }
+
+    // 先确认每张表都真的有数据。以后新增带 user_id 的表，这里会失败，提醒补上造数据和删除语句
+    const tables = userTables();
+    expect(tables).toEqual(expect.arrayContaining(['transactions', 'category_budgets', 'tags']));
+    for (const table of tables) {
+      // 把表名放进断言对象，失败时能直接看出是哪张表
+      expect({ table, hasRows: rowsOf(table, victimId) > 0 }).toEqual({ table, hasRows: true });
+    }
+
+    const res = await api.delete(`/api/auth/users/${victimId}`).set(adminAuth);
+    expect(res.body).toEqual({ success: true });
+
+    for (const table of tables) {
+      expect({ table, rows: rowsOf(table, victimId) }).toEqual({ table, rows: 0 });
+      expect({ table, keeperRows: rowsOf(table, keeperId) > 0 }).toEqual({ table, keeperRows: true });
+    }
+    expect(db.prepare('SELECT id FROM users WHERE id = ?').get(victimId)).toBeUndefined();
+    const dangling = db.prepare(
+      'SELECT COUNT(*) AS n FROM transaction_tags WHERE transaction_id NOT IN (SELECT id FROM transactions)'
+    ).get().n;
+    expect(dangling).toBe(0);
+  });
+});
+
 // ─── JWT 算法白名单 ───────────────────────────────────────────────────────────
 
 describe('JWT 只接受 HS256 签名', () => {

@@ -74,7 +74,7 @@ cd client && npm run lint
 
 **交易标签走规范化两表**（`tags` + `transaction_tags`，`003_tags.js`），不要改成 JSON 列或逗号分隔文本。要点：
 
-- **全库无外键**——项目从未开启 `PRAGMA foreign_keys`，写 `ON DELETE CASCADE` 也不生效。删除交易、管理员删用户时都要显式清 `transaction_tags`（见 transactions.js 的 DELETE 和 auth.js 的级联事务）
+- **全库无外键**——项目从未开启 `PRAGMA foreign_keys`，写 `ON DELETE CASCADE` 也不生效。删除交易、管理员删用户时都要显式清 `transaction_tags`（见 transactions.js 的 DELETE 和 auth.js 的级联事务）。**新增带 `user_id` 的表时，必须在 auth.js 删除用户的事务里补一行删除**；`auth.test.js` 的「管理员删除用户」用例会遍历所有带 `user_id` 的表检查，并要求造数据时每张表都有行，漏了会失败
 - 保存交易时自动 upsert 标签（`INSERT OR IGNORE` + 回查 id）；孤儿标签**不回收**，`GET /api/tags` 里以 `count: 0` 出现，兼作输入历史
 - **PUT 是全量替换标签集，不传 `tags` 即清空**（Zod `default([])`）——所有 PUT 调用方必须带上 `tags`
 - **`?tag=` 筛选条件必须在 COUNT 查询之前拼进 `where`**，否则 `total` 与 `data` 不同步；列表行的 `tags` 数组由 `attachTags` 一条 IN 查询批量挂载，不要退回 N+1

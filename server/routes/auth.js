@@ -167,7 +167,8 @@ router.delete('/users/:id', authMiddleware, (req, res) => {
       return res.status(400).json({ success: false, error: '不能删除管理员账号' });
     }
 
-    // 级联删除该用户所有数据
+    // 级联删除该用户所有数据。全库没有外键，新增带 user_id 的表时必须在这里补一行
+    // （auth.test.js 的「管理员删除用户」用例会检查所有带 user_id 的表）
     db.transaction(() => {
       // 关联表无 user_id，须先借 transactions 定位再删
       db.prepare(
@@ -178,6 +179,7 @@ router.delete('/users/:id', authMiddleware, (req, res) => {
       db.prepare('DELETE FROM categories WHERE user_id = ?').run(targetId);
       db.prepare('DELETE FROM settings WHERE user_id = ?').run(targetId);
       db.prepare('DELETE FROM recurring_templates WHERE user_id = ?').run(targetId);
+      db.prepare('DELETE FROM category_budgets WHERE user_id = ?').run(targetId);
       db.prepare('DELETE FROM users WHERE id = ?').run(targetId);
     })();
 
