@@ -1,20 +1,22 @@
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import SakuraEffect from './components/SakuraEffect';
+import StyleSync from './components/StyleSync';
 import HomePage from './pages/HomePage';
 import ListPage from './pages/ListPage';
 import ReportPage from './pages/ReportPage';
 import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import { getToken } from './utils/session';
 import './index.css';
 
-// 登录后的布局：显示 Navbar + 樱花效果
+// 登录后的布局：显示 Navbar + 樱花效果，并同步一次账号的界面风格
 function AuthLayout() {
-  const token = sessionStorage.getItem('token');
-  if (!token) return <Navigate to="/login" replace />;
+  if (!getToken()) return <Navigate to="/login" replace />;
   return (
     <>
+      <StyleSync />
       <SakuraEffect />
       <Outlet />
       <Navbar />

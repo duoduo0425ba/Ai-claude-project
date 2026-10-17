@@ -33,10 +33,12 @@ cd client && npm run lint
 - Token 存储在 **`sessionStorage`**（关闭浏览器自动清除——有意为之）
 - `server/middleware/auth.js` 验证 Token 后**回查 `users` 表**，将 `{ userId, username, role }` 挂载到 `req.user`——role 以数据库为准，不信任载荷；用户已删除返回 401
 - **`users.token_version`**（`004_token_version.js`）：签 Token 时写入 `tokenVersion`，中间件比对不一致即 401。改密码必须 `token_version + 1`，这是让旧 Token 立即失效的唯一机制——将来加「管理员重置密码」之类的接口时同样要 +1
+- **`users.ui_style`**（`005_ui_style.js`）：界面风格 `anime` / `space` / `classic`，默认 `anime`。注册时可传 `uiStyle`（不传即 anime），注册、登录响应都带 `uiStyle`；`GET /api/auth/me` 返回 `{ username, role, uiStyle }`；`PUT /api/auth/ui-style` 修改风格，**不动 `token_version`**（换风格不该让已登录的设备掉线）。后端 `UI_STYLES` 必须与前端 `client/src/styles/registry.js` 的 `STYLE_IDS` 一致，前端测试会对比两边
 - `jwt.verify` 限定 `algorithms: ['HS256']`
 - `/login`、`/register`、`/change-password` 有失败次数限流（`middleware/rateLimit.js`，内存实现）：15 分钟内失败 10 次即返回 429，成功请求不计数也不清零。登录按「IP + 用户名」、注册按 IP、改密按「IP + 用户 id」计数
+- 登录状态一律通过 `client/src/utils/session.js` 读写（`getToken` / `saveSession` / `clearSession` / `getCurrentUser`），不要直接操作 sessionStorage。`saveSession` 同时切换到该账号的界面风格；`clearSession` 只清 Token、保留风格缓存（登录页沿用上次的风格）；`getCurrentUser` 按 base64url + UTF-8 解 JWT 载荷（直接 `atob` 会让中文用户名乱码），只用于界面显示
 - `client/src/api/index.js` 自动注入 Token；401 响应时清除 Token 并跳转到 `/login`
-- `client/src/App.jsx` — `AuthLayout` 包裹所有路由，`/login` 和 `/register` 除外
+- `client/src/App.jsx` — `AuthLayout` 包裹所有路由，`/login` 和 `/register` 除外；它挂载 `StyleSync`，进入时请求一次 `/api/auth/me` 同步风格（失败一律静默）
 
 ### 数据库迁移机制
 
@@ -52,7 +54,7 @@ cd client && npm run lint
 
 | 路由文件 | 挂载路径 | 说明 |
 |--------|-------|-------|
-| `routes/auth.js` | `/api/auth` | 公开 — 注册、登录、改密、管理员用户 CRUD |
+| `routes/auth.js` | `/api/auth` | 公开 — 注册、登录；需登录 — 改密、当前用户（`/me`）、界面风格（`/ui-style`）、管理员用户 CRUD |
 | `routes/transactions.js` | `/api/transactions` | 受保护 — 交易 CRUD + 统计（日/周/月/年/预算/余额）+ 设置 |
 | ↳ `GET /` 查询参数 | | `startDate`、`endDate`、`category`、`type`、`keyword`、`tag`、`page`、`pageSize`、`sort`、`order` |
 | `routes/categories.js` | `/api/categories` | 受保护 — 列表、添加、删除（`is_default=1` 的默认分类不可删除） |
@@ -106,7 +108,7 @@ cd client && npm run lint
 - **排序必须走服务端。** 列表是分页的，前端只持有当前 30 条；对 `transactions` 数组本地排序得到的是「这一页里最大的」而非「全部记录里最大的」——看着能用，结果是错的。ListPage 的金额排序把 `sort`/`order` 传给后端，三态循环：`null`（按日期）→ `'desc'` → `'asc'` → `null`
 - 按金额排序时**关闭日期分组**，改用 `.sorted-list` 平铺、每条上方标注日期。否则金额顺序会打乱日期，分组头出现「08-03 / 08-01 / 08-03」这类反复跳动
 - 排序或筛选条件变更时通过 `prevFilters` ref 重置到第 1 页（新条件下停留在第 N 页没有意义）
-- 主题：在 `main.jsx` 中 React 渲染前读取 `localStorage.getItem('theme')` 并设置 `data-theme` attribute，避免首屏闪烁。深色模式选择器：`html[data-theme="dark"]` 和 `@media (prefers-color-scheme: dark)` 内的 `html:not([data-theme="light"])`
+- 外观（明暗主题 + 界面风格）统一由 `styles/appearance.js` 管理，体现为 `<html>` 上两个属性：`data-theme` **永远是解析后的 `light` / `dark`**（选「跟随系统」时由 JS 按 `matchMedia` 换算，并监听系统切换），`data-style` 是 `anime` / `space` / `classic`。localStorage 里 `theme` 存档位（system / light / dark），`uiStyle` 存上次登录账号的风格。`main.jsx` 在渲染前调用 `initAppearance()`；`index.html` 头部另有一段内联脚本在 CSS 生效前做同样的事防止首屏闪烁——**改外观逻辑时两处要同步**。`index.css` 目前仍保留与 `html[data-theme="dark"]` 重复的 `@media (prefers-color-scheme: dark)` 深色块
 - 周期账单在首页加载时自动调用 `generateRecurring()`——该接口幂等（跳过已生成的条目）
 - 标签选择用 `TagPicker` 组件（多选 chip + 自由输入）。**添加表单和编辑表单是两个不 DRY 的近似副本**（`TransactionForm` / `EditTransactionForm`），标签相关改动必须同步两处；**编辑表单的 payload 必须带 `tags`**——PUT 是全量替换，漏传会在每次编辑时清空该笔交易的标签
 - ListPage 的标签筛选 state 是**单字符串**（`''` = 不筛选，存 localStorage `listPageTag`）——`prevFilters` 用恒等比较，换成数组会每次渲染都误判变更、把页码重置回第 1 页
@@ -135,7 +137,8 @@ client/src/
 ├── pages/             # 4 个路由页面 + LoginPage、RegisterPage
 ├── components/        # BudgetAlert、CategoryPicker、TagPicker、ErrorBoundary 等
 ├── hooks/             # useToast、useLocalStorage
-├── utils/             # date.js、Excel 导入导出、date.test.js
+├── styles/            # registry.js（风格清单）、appearance.js（明暗 + 风格的唯一入口）
+├── utils/             # session.js（登录状态）、date.js、Excel 导入导出
 └── index.css          # 设计 token + 深色模式
 ```
 
@@ -146,6 +149,8 @@ client/src/
 新增迁移不需要额外测试配置——迁移在内存 DB 上自动执行。
 
 限流按 IP 计数，而测试里所有请求都来自同一个 IP：会触发限流的测试文件必须在 `afterEach` 里调用 `resetRateLimits()`（`middleware/rateLimit.js` 导出），否则一个用例触发的 429 会拦住后面的用例。测试里故意触发 500 时，用 `jest.spyOn(console, 'error').mockImplementation(() => {})` 屏蔽 `serverError` 打出的日志。
+
+前端测试（Vitest）运行在 node 环境，没有 DOM 和浏览器存储：涉及 `localStorage` / `sessionStorage` 的测试用 `vi.stubGlobal` 换成内存实现，`afterEach` 里 `vi.unstubAllGlobals()`。`appearance.js` 在没有 `document` 时只读写存储、不改属性，所以能直接在 node 下测。
 
 **发请求一律走 `tests/helpers/api.js`**：`const api = require('./helpers/api')(app)`，然后 `api.get(...)` / `api.post(...)`。不要直接用 supertest 的 `request(app)`——它每个请求都新开一个服务器、用完即关，在本机（macOS + Node 25）上偶尔会把新连接送到刚关闭的旧服务器，曾造成约 5% 的全量运行随机失败（带有效 Token 却 401、`beforeEach` 的写入丢失）。helper 让每个测试文件只启动一个服务器、所有请求共用，也快了不少。
 

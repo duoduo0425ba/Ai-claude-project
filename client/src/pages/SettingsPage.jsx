@@ -7,26 +7,19 @@ import {
   getCategoryBudgets, setCategoryBudget, deleteCategoryBudget,
 } from '../api/index';
 import { formatLocalDate } from '../utils/date';
+import { getCurrentUser, clearSession } from '../utils/session';
+import { getThemePref, setThemePref } from '../styles/appearance';
 
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-
-function getCurrentUser() {
-  const token = sessionStorage.getItem('token');
-  if (!token) return null;
-  try { return JSON.parse(atob(token.split('.')[1])); } catch { return null; }
-}
 
 export default function SettingsPage() {
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
-  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'system');
+  const [theme, setTheme] = useState(getThemePref);
 
   const handleThemeChange = (val) => {
     setTheme(val);
-    localStorage.setItem('theme', val);
-    if (val === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
-    else if (val === 'light') document.documentElement.setAttribute('data-theme', 'light');
-    else document.documentElement.removeAttribute('data-theme');
+    setThemePref(val);
   };
   const [settings, setSettings] = useState({
     monthly_income: 300,
@@ -309,7 +302,7 @@ export default function SettingsPage() {
       await changePassword({ oldPassword: pwForm.oldPassword, newPassword: pwForm.newPassword });
       showToast('密码已修改，请重新登录');
       setPwForm({ oldPassword: '', newPassword: '', confirm: '' });
-      sessionStorage.removeItem('token');
+      clearSession();
       navigate('/login', { replace: true });
     } catch (err) {
       showToast(err.message, 'error');
@@ -317,7 +310,7 @@ export default function SettingsPage() {
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem('token');
+    clearSession();
     navigate('/login', { replace: true });
   };
 

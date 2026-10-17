@@ -231,3 +231,89 @@ describe('登录、注册、改密的失败次数限流', () => {
     expect(res.status).toBe(429);
   });
 });
+
+// ─── 界面风格 ─────────────────────────────────────────────────────────────────
+
+describe('界面风格：注册时选择、登录时返回、设置里修改', () => {
+  const styleInDb = (username) =>
+    db.prepare('SELECT ui_style FROM users WHERE username = ?').get(username)?.ui_style;
+  const register = (body) =>
+    api.post('/api/auth/register').send({ password: 'password123', ...body });
+
+  it('迁移前就存在的账号默认是二次元风格', () => {
+    // admin 由 001 号迁移创建，ui_style 列是 005 号迁移后加的
+    expect(styleInDb('admin')).toBe('anime');
+  });
+
+  it('注册时不选风格，默认二次元', async () => {
+    const res = await register({ username: 'style_default' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.uiStyle).toBe('anime');
+    expect(styleInDb('style_default')).toBe('anime');
+  });
+
+  it('注册时选了星际探索，响应和数据库里都是 space', async () => {
+    const res = await register({ username: 'style_space', uiStyle: 'space' });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({
+      token: expect.any(String), username: 'style_space', role: 'user', uiStyle: 'space',
+    });
+    expect(styleInDb('style_space')).toBe('space');
+  });
+
+  it('注册时传了不存在的风格，返回 400，账号也不会被创建', async () => {
+    const res = await register({ username: 'style_bad', uiStyle: 'hello' });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ success: false, error: '无效的界面风格' });
+    expect(styleInDb('style_bad')).toBeUndefined();
+  });
+
+  it('登录响应带上该账号的风格', async () => {
+    await register({ username: 'style_login', uiStyle: 'classic' });
+    const res = await login('style_login', 'password123');
+    expect(res.status).toBe(200);
+    expect(res.body.data.uiStyle).toBe('classic');
+  });
+
+  it('改风格后 /me 和再次登录都拿到新风格，旧 Token 仍然有效', async () => {
+    const { auth } = await signup('style_switch');
+    const put = await api.put('/api/auth/ui-style').set(auth).send({ uiStyle: 'classic' });
+    expect(put.status).toBe(200);
+    expect(put.body).toEqual({ success: true });
+
+    const me = await api.get('/api/auth/me').set(auth);
+    expect(me.status).toBe(200);
+    expect(me.body.data).toEqual({ username: 'style_switch', role: 'user', uiStyle: 'classic' });
+    expect((await login('style_switch', 'password123')).body.data.uiStyle).toBe('classic');
+    // 换风格不能像改密码那样让已登录的设备掉线
+    expect((await api.get('/api/transactions').set(auth)).status).toBe(200);
+  });
+
+  it('改成不存在的风格或请求体格式不对，返回 400，风格不变', async () => {
+    const { auth } = await signup('style_guard');
+    const put = (body) => api.put('/api/auth/ui-style').set(auth).send(body);
+
+    const bad = await put({ uiStyle: 'hello' });
+    expect(bad.status).toBe(400);
+    expect(bad.body).toEqual({ success: false, error: '无效的界面风格' });
+    expect((await put({})).status).toBe(400);
+    expect((await put(['space'])).status).toBe(400);
+    expect(styleInDb('style_guard')).toBe('anime');
+  });
+
+  it('没登录不能查询或修改风格', async () => {
+    expect((await api.get('/api/auth/me')).status).toBe(401);
+    expect((await api.put('/api/auth/ui-style').send({ uiStyle: 'space' })).status).toBe(401);
+  });
+
+  it('管理员的用户列表里能看到每个人的风格', async () => {
+    const { auth } = await signup('style_admin');
+    db.prepare("UPDATE users SET role = 'admin' WHERE username = 'style_admin'").run();
+    await register({ username: 'style_listed', uiStyle: 'space' });
+
+    const res = await api.get('/api/auth/users').set(auth);
+    expect(res.status).toBe(200);
+    const listed = res.body.data.find((u) => u.username === 'style_listed');
+    expect(listed.uiStyle).toBe('space');
+  });
+});

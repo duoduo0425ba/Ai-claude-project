@@ -1,7 +1,9 @@
+import { getToken, clearSession } from '../utils/session';
+
 const BASE = '/api';
 
 async function request(url, options = {}) {
-  const token = sessionStorage.getItem('token');
+  const token = getToken();
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -14,7 +16,7 @@ async function request(url, options = {}) {
   }
 
   if (res.status === 401) {
-    sessionStorage.removeItem('token');
+    clearSession();
     window.location.replace('/login');
     const err = new Error('登录已过期，请重新登录');
     err.name = 'AuthError';
@@ -42,6 +44,9 @@ export const login = (data) =>
   request('/auth/login', { method: 'POST', body: JSON.stringify(data) });
 export const changePassword = (data) =>
   request('/auth/change-password', { method: 'POST', body: JSON.stringify(data) });
+export const getMe = (options = {}) => request('/auth/me', options);
+export const updateUiStyle = (uiStyle) =>
+  request('/auth/ui-style', { method: 'PUT', body: JSON.stringify({ uiStyle }) });
 export const getUsers = () => request('/auth/users');
 export const deleteUser = (id) => request(`/auth/users/${id}`, { method: 'DELETE' });
 

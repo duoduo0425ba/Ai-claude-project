@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { login } from '../api';
+import { saveSession } from '../utils/session';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -14,7 +15,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await login(form);
-      sessionStorage.setItem('token', res.data.token);
+      saveSession(res.data);
       navigate('/', { replace: true });
     } catch (err) {
       setError(err.message);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { register } from '../api';
+import { saveSession } from '../utils/session';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -18,7 +19,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const res = await register({ username: form.username, password: form.password });
-      sessionStorage.setItem('token', res.data.token);
+      saveSession(res.data);
       navigate('/', { replace: true });
     } catch (err) {
       setError(err.message);

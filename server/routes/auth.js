@@ -15,6 +15,13 @@ const credSchema = z.object({
   password: z.string().min(6, '密码至少 6 个字符'),
 });
 
+// 界面风格。前端 client/src/styles/registry.js 的 STYLE_IDS 必须与这里保持一致
+const UI_STYLES = ['anime', 'space', 'classic'];
+const uiStyleSchema = z.enum(UI_STYLES, '无效的界面风格');
+
+// 注册比登录多一个可选的界面风格，不传就是 anime
+const registerSchema = credSchema.extend({ uiStyle: uiStyleSchema.default('anime') });
+
 function makeToken(user) {
   return jwt.sign(
     { userId: user.id, username: user.username, role: user.role, tokenVersion: user.token_version },
@@ -23,14 +30,19 @@ function makeToken(user) {
   );
 }
 
+// 注册和登录成功时返回给前端的数据
+function authPayload(user) {
+  return { token: makeToken(user), username: user.username, role: user.role, uiStyle: user.ui_style };
+}
+
 // POST /api/auth/register
 router.post('/register', registerLimiter, (req, res) => {
   try {
-    const parsed = credSchema.safeParse(req.body);
+    const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ success: false, error: parsed.error.issues[0].message });
     }
-    const { username, password } = parsed.data;
+    const { username, password, uiStyle } = parsed.data;
 
     const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
     if (exists) {
@@ -39,14 +51,14 @@ router.post('/register', registerLimiter, (req, res) => {
 
     const hash = bcrypt.hashSync(password, 10);
     const result = db.prepare(
-      "INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'user')"
-    ).run(username, hash);
+      "INSERT INTO users (username, password_hash, role, ui_style) VALUES (?, ?, 'user', ?)"
+    ).run(username, hash, uiStyle);
 
     const newUserId = result.lastInsertRowid;
     seedDefaults(newUserId);
 
-    const user = db.prepare('SELECT id, username, role, token_version FROM users WHERE id = ?').get(newUserId);
-    res.json({ success: true, data: { token: makeToken(user), username: user.username, role: user.role } });
+    const user = db.prepare('SELECT id, username, role, token_version, ui_style FROM users WHERE id = ?').get(newUserId);
+    res.json({ success: true, data: authPayload(user) });
   } catch (err) {
     serverError(res, err);
   }
@@ -66,7 +78,32 @@ router.post('/login', loginLimiter, (req, res) => {
       return res.status(401).json({ success: false, error: '用户名或密码错误' });
     }
 
-    res.json({ success: true, data: { token: makeToken(user), username: user.username, role: user.role } });
+    res.json({ success: true, data: authPayload(user) });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+// GET /api/auth/me  (需登录) — 前端刷新页面时用它同步界面风格
+router.get('/me', authMiddleware, (req, res) => {
+  try {
+    const user = db.prepare('SELECT username, role, ui_style FROM users WHERE id = ?').get(req.user.userId);
+    res.json({ success: true, data: { username: user.username, role: user.role, uiStyle: user.ui_style } });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+// PUT /api/auth/ui-style  (需登录)
+// 只改外观，不动 token_version：换风格不应该让已登录的设备掉线
+router.put('/ui-style', authMiddleware, (req, res) => {
+  try {
+    const parsed = z.object({ uiStyle: uiStyleSchema }, '请求数据格式错误').safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+    }
+    db.prepare('UPDATE users SET ui_style = ? WHERE id = ?').run(parsed.data.uiStyle, req.user.userId);
+    res.json({ success: true });
   } catch (err) {
     serverError(res, err);
   }
@@ -106,7 +143,7 @@ router.get('/users', authMiddleware, (req, res) => {
   }
   try {
     const users = db.prepare(
-      'SELECT id, username, role, created_at FROM users ORDER BY created_at ASC'
+      'SELECT id, username, role, created_at, ui_style AS uiStyle FROM users ORDER BY created_at ASC'
     ).all();
     res.json({ success: true, data: users });
   } catch (err) {
