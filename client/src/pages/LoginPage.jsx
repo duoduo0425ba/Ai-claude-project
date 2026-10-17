@@ -26,7 +26,7 @@ export default function LoginPage() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', background: 'var(--bg-primary)' }}>
-      <div style={{ background: 'var(--card-bg)', borderRadius: 'var(--radius-lg)', padding: '36px 28px', width: '100%', maxWidth: '380px', boxShadow: 'var(--shadow-card)' }}>
+      <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', padding: '36px 28px', width: '100%', maxWidth: '380px', boxShadow: 'var(--shadow-card)' }}>
         <h1 style={{ fontSize: '1.5rem', textAlign: 'center', marginBottom: '8px' }}>🌸 零花钱记账</h1>
         <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '28px' }}>登录你的账号</p>
 
@@ -55,14 +55,14 @@ export default function LoginPage() {
               required
             />
           </div>
-          {error && <p style={{ color: 'var(--danger-color, #e53935)', fontSize: '0.85rem', marginBottom: '12px' }}>{error}</p>}
+          {error && <p style={{ color: 'var(--danger-color)', fontSize: '0.85rem', marginBottom: '12px' }}>{error}</p>}
           <button className="btn btn-primary" type="submit" disabled={loading} style={{ width: '100%', padding: '12px' }}>
             {loading ? '登录中...' : '登录'}
           </button>
         </form>
 
         <p style={{ textAlign: 'center', marginTop: '20px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-          还没有账号？<Link to="/register" style={{ color: 'var(--accent-primary)' }}>立即注册</Link>
+          还没有账号？<Link to="/register" style={{ color: 'var(--accent-dark)' }}>立即注册</Link>
         </p>
       </div>
     </div>

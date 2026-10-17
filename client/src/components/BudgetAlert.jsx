@@ -23,7 +23,7 @@ export default function BudgetAlert() {
 
   if (error) {
     return (
-      <div className="budget-card animate-slide-up section-gap" style={{ borderColor: 'var(--expense-color)', background: 'rgba(232, 134, 155, 0.1)' }}>
+      <div className="budget-card animate-slide-up section-gap" style={{ borderColor: 'var(--expense-color)', background: 'var(--expense-bg)' }}>
         <div style={{ color: 'var(--expense-color)', fontSize: '0.9rem', textAlign: 'center', padding: '12px 0' }}>
           ⚠️ {error}
         </div>
@@ -45,7 +45,7 @@ export default function BudgetAlert() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <span className="budget-amount" style={{
           color: budget.status === 'danger' ? 'var(--expense-color)' :
-                 budget.status === 'warn'   ? '#c67700' : 'var(--income-color)'
+                 budget.status === 'warn'   ? 'var(--warn-text)' : 'var(--income-color)'
         }}>
           ¥{budget.totalExpense.toFixed(2)}
         </span>
@@ -76,7 +76,7 @@ export default function BudgetAlert() {
                 <span>{cb.emoji} {cb.category}</span>
                 <span style={{
                   color: cb.status === 'danger' ? 'var(--expense-color)' :
-                         cb.status === 'warn'   ? '#c67700' : 'var(--text-muted)'
+                         cb.status === 'warn'   ? 'var(--warn-text)' : 'var(--text-muted)'
                 }}>
                   ¥{cb.spent.toFixed(2)} / ¥{cb.budgetAmount}
                 </span>

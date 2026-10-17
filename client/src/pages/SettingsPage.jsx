@@ -704,7 +704,7 @@ export default function SettingsPage() {
             <h2 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '12px' }}>🔐 账号安全</h2>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
               当前用户：<strong>{currentUser?.username}</strong>
-              {currentUser?.role === 'admin' && <span style={{ marginLeft: '6px', fontSize: '0.8rem', background: 'var(--accent-primary)', color: '#fff', borderRadius: '4px', padding: '1px 6px' }}>管理员</span>}
+              {currentUser?.role === 'admin' && <span style={{ marginLeft: '6px', fontSize: '0.8rem', background: 'var(--accent-dark)', color: 'var(--on-accent)', borderRadius: '4px', padding: '1px 6px' }}>管理员</span>}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <input className="input-field" type="password" placeholder="旧密码"
@@ -732,7 +732,7 @@ export default function SettingsPage() {
                   <div key={u.id} className="category-list-item">
                     <div style={{ flex: 1 }}>
                       <span style={{ fontWeight: 500 }}>{u.username}</span>
-                      {u.role === 'admin' && <span style={{ marginLeft: '6px', fontSize: '0.75rem', background: 'var(--accent-primary)', color: '#fff', borderRadius: '4px', padding: '1px 5px' }}>admin</span>}
+                      {u.role === 'admin' && <span style={{ marginLeft: '6px', fontSize: '0.75rem', background: 'var(--accent-dark)', color: 'var(--on-accent)', borderRadius: '4px', padding: '1px 5px' }}>admin</span>}
                       <span style={{ marginLeft: '8px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{u.created_at?.slice(0, 10)}</span>
                     </div>
                     {u.role !== 'admin' && u.id !== currentUser?.userId && (
