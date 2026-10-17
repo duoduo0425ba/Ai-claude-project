@@ -1,6 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { STYLE_IDS, DEFAULT_STYLE, resolveStyle } from './registry';
+import { STYLE_IDS, DEFAULT_STYLE, STYLES, resolveStyle } from './registry';
+
+describe('STYLES', () => {
+  it('每种风格都有卡片要用的名字、介绍和三个色块，不多不少', () => {
+    expect(Object.keys(STYLES)).toEqual(STYLE_IDS);
+    for (const id of STYLE_IDS) {
+      const s = STYLES[id];
+      expect({ id, name: typeof s.name, tagline: typeof s.tagline, emoji: typeof s.emoji })
+        .toEqual({ id, name: 'string', tagline: 'string', emoji: 'string' });
+      expect(s.preview).toHaveLength(3);
+      for (const color of s.preview) expect(color).toMatch(/^#[0-9A-F]{6}$/i);
+    }
+  });
+});
 
 describe('resolveStyle', () => {
   it('认识的风格原样返回', () => {

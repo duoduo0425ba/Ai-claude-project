@@ -1,0 +1,11 @@
+/* 星际探索风格的标题和金额字体（client/public/fonts/README.md 有来源和许可）。
+   浏览器只在页面真正用到 Orbitron 时才下载，其他风格不会请求这个文件。
+   它只含拉丁字母和数字，中文会自动落到 --font-main 里的苹方等字体上。 */
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('/fonts/orbitron-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

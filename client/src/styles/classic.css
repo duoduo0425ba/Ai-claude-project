@@ -1,0 +1,233 @@
+/* ========== 经典账本 ==========
+   米白纸张配深绿、藏青，支出用砖红；宋体，直角，实心卡片，账本横线，没有动画。
+   浅色块必须写全 index.css :root 的所有令牌，深色块至少覆盖二次元深色块的那些令牌（tokens.test.js 检查）。 */
+
+html[data-style="classic"] {
+  --accent: #2F6B4F;
+  --accent-light: #CFE3D6;
+  --accent-dark: #1F4E38;
+  --secondary: #2B3A67;
+  --secondary-light: #D6DBEA;
+  --secondary-dark: #1C2747;
+  --positive: #4E8C64;
+  --positive-light: #D4EADB;
+  --positive-dark: #2A6B45;
+
+  --bg-primary: #F6F1E4;
+  --bg-secondary: #EFE8D6;
+  --bg-card: #FBF8EF;
+  --bg-glass: #F3EEDF;
+  --bg-input: #FFFDF7;
+  --bg-nav: #FBF8EF;
+  --bg-elevated: #FFFFFF;
+  --bg-modal: var(--bg-primary);
+  --glass-border: #D9D1BC;
+  --glass-border-soft: #D9D1BC;
+  --border-color: #D9D1BC;
+  --overlay: rgba(31, 42, 36, 0.45);
+
+  --text-primary: #1F2A24;
+  --text-secondary: #4A5A50;
+  --text-muted: #7C877F;
+  --on-accent: #FFFFFF;
+  --on-expense: #FFFFFF;
+  --on-danger: #FFFFFF;
+
+  --income-color: #2A6B45;
+  --expense-color: #A23B3B;
+  --income-bg: rgba(42, 107, 69, 0.12);
+  --expense-bg: rgba(162, 59, 59, 0.12);
+  --income-strong: #2A6B45;
+  --expense-strong: #A23B3B;
+  --error-bg: #A23B3B;
+  --warn: #B7791F;
+  --warn-strong: #FFFFFF;
+  --warn-bg: rgba(183, 121, 31, 0.14);
+  --warn-text: #8A5A12;
+  --danger-color: #A23B3B;
+
+  --accent-soft: rgba(47, 107, 79, 0.1);
+  --focus-ring: rgba(47, 107, 79, 0.25);
+  --track-bg: #E6DFCB;
+
+  --shadow-soft: none;
+  --shadow-card: 0 1px 2px rgba(31, 42, 36, 0.08);
+  --shadow-float: 0 4px 12px rgba(31, 42, 36, 0.15);
+  --shadow-nav: 0 -1px 0 #D9D1BC;
+  --glow-primary: none;
+  --glow-primary-hover: none;
+  --glow-income: none;
+  --glow-income-hover: none;
+  --glow-expense: none;
+  --glow-expense-hover: none;
+  --glow-toggle-income: none;
+  --glow-toggle-expense: none;
+
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-pill: 0;
+  --radius-round: 0;
+  --radius-tag: 0;
+  --blur-xs: none;
+  --blur-sm: none;
+  --blur-md: none;
+  --blur-lg: none;
+  --blur-xl: none;
+
+  --font-main: 'Songti SC', 'STSong', 'Noto Serif CJK SC', 'Source Han Serif SC', Georgia, 'Times New Roman', serif;
+  --font-display: var(--font-main);
+  --font-numeric: Georgia, 'Times New Roman', serif;
+  --numeric-variant: lining-nums tabular-nums;   /* Georgia 默认是高低不齐的旧式数字，金额要等高等宽 */
+  --numeric-scale: 1;
+  --display-tracking: 0;
+
+  /* 账本风格不用渐变：两端同色就是纯色 */
+  --gradient-income: linear-gradient(#2F6B4F, #2F6B4F);
+  --gradient-expense: linear-gradient(#A23B3B, #A23B3B);
+  --gradient-header: linear-gradient(#1F4E38, #1F4E38);
+  --gradient-warn: linear-gradient(#B7791F, #B7791F);
+  --gradient-danger: linear-gradient(#A23B3B, #A23B3B);
+  --ambient-bg: repeating-linear-gradient(180deg, transparent 0 27px, rgba(43, 58, 103, 0.1) 27px 28px);
+  --ambient-opacity: 1;
+
+  --chart-income: rgba(42, 107, 69, 0.85);
+  --chart-income-bg: rgba(42, 107, 69, 0.12);
+  --chart-expense: rgba(162, 59, 59, 0.85);
+  --chart-expense-bg: rgba(162, 59, 59, 0.12);
+  --chart-text: #4A5A50;
+  --chart-tick: #7C877F;
+  --chart-grid: rgba(31, 42, 36, 0.1);
+  --chart-tooltip-bg: rgba(251, 248, 239, 0.97);
+  --chart-tooltip-text: #1F2A24;
+  --chart-tooltip-border: #D9D1BC;
+  --chart-pie-border: #FBF8EF;
+  --chart-1: #2F6B4F;
+  --chart-2: #2B3A67;
+  --chart-3: #A23B3B;
+  --chart-4: #B7791F;
+  --chart-5: #5B7C99;
+  --chart-6: #7A5C3E;
+  --chart-7: #4E7D6A;
+  --chart-8: #8C6D9E;
+  --chart-9: #A0522D;
+  --chart-10: #6B7B5E;
+}
+
+html[data-style="classic"][data-theme="dark"] {
+  --accent: #6FA287;
+  --accent-light: #2F4A3D;
+  --accent-dark: #8FBFA5;
+  --secondary: #8A9BD1;
+  --secondary-light: #2E3A5C;
+  --secondary-dark: #A9B7E3;
+  --positive: #7FC49B;
+  --positive-light: #24382C;
+  --positive-dark: #A3DBB8;
+
+  --bg-primary: #131A17;
+  --bg-secondary: #1B241F;
+  --bg-card: #1F2A25;
+  --bg-glass: #243029;
+  --bg-input: #18211D;
+  --bg-nav: #1F2A25;
+  --bg-elevated: #2A3730;
+  --bg-modal: var(--bg-secondary);
+  --glass-border: #3A463F;
+  --glass-border-soft: #3A463F;
+  --border-color: #3A463F;
+  --overlay: rgba(0, 0, 0, 0.6);
+
+  --text-primary: #EDE6D3;
+  --text-secondary: #BFB8A6;
+  --text-muted: #8A8474;
+  --on-accent: #131A17;               /* 深色下主色是浅绿，上面的字要用深色 */
+  --on-expense: #FFFFFF;              /* 支出按钮是较深的砖红，白字更清楚 */
+
+  --income-color: #7FC49B;
+  --expense-color: #E07A7A;
+  --income-bg: rgba(127, 196, 155, 0.14);
+  --expense-bg: rgba(224, 122, 122, 0.14);
+  --income-strong: #7FC49B;
+  --expense-strong: #E07A7A;
+  --error-bg: #C05555;
+  --warn: #D9A441;
+  --warn-strong: #1F1A0A;
+  --warn-bg: rgba(217, 164, 65, 0.14);
+  --warn-text: #E2B65E;
+  --danger-color: #E07A7A;
+
+  --accent-soft: rgba(111, 162, 135, 0.14);
+  --focus-ring: rgba(111, 162, 135, 0.3);
+  --track-bg: #2E3A33;
+
+  --shadow-soft: none;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-float: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-nav: 0 -1px 0 #3A463F;
+
+  --gradient-income: linear-gradient(#6FA287, #6FA287);
+  --gradient-expense: linear-gradient(#C05555, #C05555);
+  --gradient-header: linear-gradient(#8FBFA5, #8FBFA5);
+  --gradient-warn: linear-gradient(#D9A441, #D9A441);
+  --gradient-danger: linear-gradient(#C05555, #C05555);
+  --ambient-bg: repeating-linear-gradient(180deg, transparent 0 27px, rgba(237, 230, 211, 0.06) 27px 28px);
+  --ambient-opacity: 1;
+
+  --chart-income: rgba(127, 196, 155, 0.85);
+  --chart-income-bg: rgba(127, 196, 155, 0.14);
+  --chart-expense: rgba(224, 122, 122, 0.85);
+  --chart-expense-bg: rgba(224, 122, 122, 0.14);
+  --chart-text: #BFB8A6;
+  --chart-tick: #8A8474;
+  --chart-grid: rgba(237, 230, 211, 0.1);
+  --chart-tooltip-bg: rgba(31, 42, 37, 0.97);
+  --chart-tooltip-text: #EDE6D3;
+  --chart-tooltip-border: #3A463F;
+  --chart-pie-border: #1F2A25;
+  --chart-1: #6FA287;
+  --chart-2: #8A9BD1;
+  --chart-3: #E07A7A;
+  --chart-4: #D9A441;
+  --chart-5: #7FA3C4;
+  --chart-6: #B08968;
+  --chart-7: #7FB5A0;
+  --chart-8: #B39BC8;
+  --chart-9: #C8875E;
+  --chart-10: #9AA88A;
+}
+
+/* ---- 账本的版式：只用于这一种风格的少量组件样式 ---- */
+
+/* 账单像账本一样一行一行排：卡片之间不留缝，只有底部一条分隔线 */
+html[data-style="classic"] .date-group .transaction-list {
+  gap: 0;
+}
+
+html[data-style="classic"] .transaction-card {
+  border-width: 0 0 1px;
+}
+
+/* 每个日期下面一道粗线，相当于账本的分节线 */
+html[data-style="classic"] .date-group-header {
+  margin-bottom: 0;
+  border-bottom: 2px solid var(--accent);
+}
+
+/* 没有动画：用极短时长而不是 animation: none，带 forwards 的入场动画仍会停在终点 */
+html[data-style="classic"] *,
+html[data-style="classic"] *::before,
+html[data-style="classic"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* 悬停、点击时也不位移、不放大 */
+html[data-style="classic"] :is(.glass-card, .btn, .btn-secondary, .category-item, .transaction-card, .pagination button, .category-add-form button):is(:hover, :active),
+html[data-style="classic"] .category-item:hover .cat-emoji,
+html[data-style="classic"] .nav-item .nav-icon {
+  transform: none;
+}

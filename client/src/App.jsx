@@ -9,15 +9,17 @@ import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import { getToken } from './utils/session';
+import { useAppearance } from './hooks/useAppearance';
 import './index.css';
 
-// 登录后的布局：显示 Navbar + 樱花效果，并同步一次账号的界面风格
+// 登录后的布局：显示 Navbar 和背景动效，并同步一次账号的界面风格
 function AuthLayout() {
+  const { style } = useAppearance();
   if (!getToken()) return <Navigate to="/login" replace />;
   return (
     <>
       <StyleSync />
-      <SakuraEffect />
+      {style === 'anime' && <SakuraEffect />}
       <Outlet />
       <Navbar />
     </>

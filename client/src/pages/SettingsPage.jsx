@@ -4,11 +4,14 @@ import {
   getSettings, updateSettings, getCategories, addCategory, deleteCategory,
   getRecurringTemplates, addRecurringTemplate, deleteRecurringTemplate, toggleRecurringTemplate, generateRecurring,
   getTransactions, batchImport, changePassword, getUsers, deleteUser,
-  getCategoryBudgets, setCategoryBudget, deleteCategoryBudget,
+  getCategoryBudgets, setCategoryBudget, deleteCategoryBudget, updateUiStyle,
 } from '../api/index';
 import { formatLocalDate } from '../utils/date';
 import { getCurrentUser, clearSession } from '../utils/session';
-import { getThemePref, setThemePref } from '../styles/appearance';
+import { getThemePref, setThemePref, applyStyle } from '../styles/appearance';
+import { STYLES } from '../styles/registry';
+import { useAppearance } from '../hooks/useAppearance';
+import StylePicker from '../components/StylePicker';
 
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
@@ -21,6 +24,9 @@ export default function SettingsPage() {
     setTheme(val);
     setThemePref(val);
   };
+
+  const { style: currentStyle } = useAppearance();
+  const [savingStyle, setSavingStyle] = useState(false);
   const [settings, setSettings] = useState({
     monthly_income: 300,
     warn_threshold: 200,
@@ -57,6 +63,24 @@ export default function SettingsPage() {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 3000);
   }, []);
+
+  // 先换上新风格让人立刻看到效果，后端保存成功才记住；保存失败就换回原来的
+  const handleStyleChange = async (id) => {
+    if (id === currentStyle || savingStyle) return;
+    const previous = currentStyle;
+    applyStyle(id, { persist: false });
+    setSavingStyle(true);
+    try {
+      await updateUiStyle(id);
+      applyStyle(id);
+      showToast(`已切换为「${STYLES[id].name}」`);
+    } catch (err) {
+      applyStyle(previous, { persist: false });
+      showToast(err.message || '切换失败，请稍后再试', 'error');
+    } finally {
+      setSavingStyle(false);
+    }
+  };
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -697,6 +721,16 @@ export default function SettingsPage() {
               </select>
               <p className="setting-desc">选择界面主题，立即生效</p>
             </div>
+            <div className="setting-item">
+              <label id="settings-style-label">界面风格</label>
+              <StylePicker
+                value={currentStyle}
+                onChange={handleStyleChange}
+                labelledBy="settings-style-label"
+                busy={savingStyle}
+              />
+              <p className="setting-desc">只改你自己账号的界面，立即生效</p>
+            </div>
           </div>
 
           {/* 账号安全 */}
@@ -734,6 +768,7 @@ export default function SettingsPage() {
                       <span style={{ fontWeight: 500 }}>{u.username}</span>
                       {u.role === 'admin' && <span style={{ marginLeft: '6px', fontSize: '0.75rem', background: 'var(--accent-dark)', color: 'var(--on-accent)', borderRadius: '4px', padding: '1px 5px' }}>admin</span>}
                       <span style={{ marginLeft: '8px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{u.created_at?.slice(0, 10)}</span>
+                      {STYLES[u.uiStyle] && <span style={{ marginLeft: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{STYLES[u.uiStyle].emoji} {STYLES[u.uiStyle].name}</span>}
                     </div>
                     {u.role !== 'admin' && u.id !== currentUser?.userId && (
                       <button className="btn btn-danger delete-btn" onClick={() => handleDeleteUser(u.id)}>删除</button>

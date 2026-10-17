@@ -1,4 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
+/* 各界面风格的令牌和少量专属样式。选择器带 html[data-style="…"]，比本文件的 :root 优先，与引入顺序无关 */
+@import './styles/fonts.css';
+@import './styles/space.css';
+@import './styles/classic.css';
 
 /* ========== Design Tokens ========== */
 /* 二次元风格（默认）的浅色令牌；深色令牌在文件末尾。
@@ -46,7 +50,8 @@
   --income-bg: rgba(107, 196, 168, 0.15);
   --expense-bg: rgba(232, 134, 155, 0.15);
   --income-strong: var(--positive-dark);  /* 预算「花费合理」提示的文字 */
-  --expense-strong: var(--accent-dark);   /* 预算超支提示的文字、错误提示条的底色 */
+  --expense-strong: var(--accent-dark);   /* 预算超支提示的文字 */
+  --error-bg: var(--accent-dark);         /* 错误提示条的底色，上面的文字用 --on-expense */
   --warn: #FFD93D;                     /* 警告提示条的底色 */
   --warn-strong: #6B4E00;              /* 警告提示条的文字 */
   --warn-bg: rgba(255, 217, 61, 0.15);
@@ -92,6 +97,8 @@
   --font-display: var(--font-main);    /* 页面大标题 */
   --font-numeric: var(--font-main);    /* 金额 */
   --numeric-variant: normal;
+  --numeric-scale: 1;                  /* 金额字号倍数：数字字体偏宽的风格调小一点 */
+  --display-tracking: 0;               /* 页面大标题的字距 */
 
   /* 渐变与背景氛围 */
   --gradient-income: linear-gradient(135deg, var(--positive) 0%, var(--positive-dark) 100%);
@@ -371,6 +378,7 @@ body::before {
 .page-header h1 {
   font-family: var(--font-display);
   font-size: 1.6rem;
+  letter-spacing: var(--display-tracking);
   background: var(--gradient-header);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -494,7 +502,7 @@ body::before {
 .budget-amount {
   font-family: var(--font-numeric);
   font-variant-numeric: var(--numeric-variant);
-  font-size: 1.5rem;
+  font-size: calc(1.5rem * var(--numeric-scale));
   font-weight: bold;
   animation: countUp 0.5s ease;
 }
@@ -573,7 +581,7 @@ body::before {
 .summary-item .value {
   font-family: var(--font-numeric);
   font-variant-numeric: var(--numeric-variant);
-  font-size: 1.2rem;
+  font-size: calc(1.2rem * var(--numeric-scale));
   font-weight: bold;
   animation: countUp 0.6s ease;
 }
@@ -642,7 +650,7 @@ body::before {
 .transaction-amount {
   font-family: var(--font-numeric);
   font-variant-numeric: var(--numeric-variant);
-  font-size: 1.1rem;
+  font-size: calc(1.1rem * var(--numeric-scale));
   font-weight: bold;
   flex-shrink: 0;
 }
@@ -938,7 +946,7 @@ body::before {
 .report-summary-item .value {
   font-family: var(--font-numeric);
   font-variant-numeric: var(--numeric-variant);
-  font-size: 1.3rem;
+  font-size: calc(1.3rem * var(--numeric-scale));
   font-weight: bold;
 }
 
@@ -971,7 +979,7 @@ body::before {
 }
 
 .toast.error {
-  background: var(--expense-strong);
+  background: var(--error-bg);
   color: var(--on-expense);
 }
 
@@ -1269,7 +1277,7 @@ body::before {
 .balance-item .value {
   font-family: var(--font-numeric);
   font-variant-numeric: var(--numeric-variant);
-  font-size: 1.2rem;
+  font-size: calc(1.2rem * var(--numeric-scale));
   font-weight: bold;
   animation: countUp 0.6s ease;
 }
@@ -1427,6 +1435,73 @@ body::before {
   .category-add-form button {
     width: 100%;
   }
+}
+
+/* ========== Style Picker（注册页、设置页的界面风格卡片） ========== */
+.style-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.style-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 4px;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-glass);
+  font-family: var(--font-main);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.style-card:hover {
+  border-color: var(--accent);
+}
+
+.style-card[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.style-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.style-picker[aria-busy="true"] .style-card {
+  cursor: wait;
+}
+
+.style-swatches {
+  display: flex;
+}
+
+.style-swatches i {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-round);
+  border: 2px solid var(--bg-elevated);
+}
+
+.style-swatches i + i {
+  margin-left: -5px;
+}
+
+.style-name {
+  font-size: 0.8rem;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.style-desc {
+  font-size: 0.7rem;
+  color: var(--text-muted);
 }
 
 /* ========== Dark Mode ========== */
