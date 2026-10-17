@@ -2,15 +2,15 @@
 
 /* ========== Design Tokens ========== */
 :root {
-  --sakura-pink: #FFB7C5;
-  --sakura-pink-light: #FFD6E0;
-  --sakura-pink-dark: #E8869B;
-  --lavender: #C8A2C8;
-  --lavender-light: #E0CDE0;
-  --lavender-dark: #A67BA6;
-  --mint: #98D8C8;
-  --mint-light: #C0EDE2;
-  --mint-dark: #6BC4A8;
+  --accent: #FFB7C5;
+  --accent-light: #FFD6E0;
+  --accent-dark: #E8869B;
+  --secondary: #C8A2C8;
+  --secondary-light: #E0CDE0;
+  --secondary-dark: #A67BA6;
+  --positive: #98D8C8;
+  --positive-light: #C0EDE2;
+  --positive-dark: #6BC4A8;
 
   --bg-primary: #FFF5F7;
   --bg-secondary: #FFF0F5;
@@ -37,10 +37,10 @@
 
   --font-main: 'ZCOOL KuaiLe', 'PingFang SC', sans-serif;
 
-  --gradient-main: linear-gradient(135deg, var(--sakura-pink-light) 0%, var(--lavender-light) 50%, var(--mint-light) 100%);
-  --gradient-income: linear-gradient(135deg, var(--mint) 0%, var(--mint-dark) 100%);
-  --gradient-expense: linear-gradient(135deg, var(--sakura-pink) 0%, var(--sakura-pink-dark) 100%);
-  --gradient-header: linear-gradient(135deg, var(--sakura-pink) 0%, var(--lavender) 50%, var(--mint) 100%);
+  --gradient-main: linear-gradient(135deg, var(--accent-light) 0%, var(--secondary-light) 50%, var(--positive-light) 100%);
+  --gradient-income: linear-gradient(135deg, var(--positive) 0%, var(--positive-dark) 100%);
+  --gradient-expense: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+  --gradient-header: linear-gradient(135deg, var(--accent) 0%, var(--secondary) 50%, var(--positive) 100%);
 }
 
 /* ========== Reset & Base ========== */
@@ -90,7 +90,7 @@ body::before {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--lavender-light);
+  background: var(--secondary-light);
   border-radius: 3px;
 }
 
@@ -169,12 +169,12 @@ body::before {
 .btn-ghost {
   background: transparent;
   color: var(--text-secondary);
-  border: 2px solid var(--lavender-light);
+  border: 2px solid var(--secondary-light);
 }
 
 .btn-ghost:hover {
-  background: var(--lavender-light);
-  color: var(--lavender-dark);
+  background: var(--secondary-light);
+  color: var(--secondary-dark);
   transform: scale(1.05);
 }
 
@@ -193,7 +193,7 @@ body::before {
 .input-field {
   width: 100%;
   padding: 12px 16px;
-  border: 2px solid var(--lavender-light);
+  border: 2px solid var(--secondary-light);
   border-radius: var(--radius-md);
   font-family: var(--font-main);
   font-size: 1rem;
@@ -205,7 +205,7 @@ body::before {
 }
 
 .input-field:focus {
-  border-color: var(--sakura-pink);
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(255, 183, 197, 0.2);
 }
 
@@ -385,7 +385,7 @@ body::before {
 }
 
 .category-item.selected {
-  border-color: var(--sakura-pink);
+  border-color: var(--accent);
   background: rgba(255, 183, 197, 0.15);
   color: var(--text-primary);
 }
@@ -458,7 +458,7 @@ body::before {
 
 .budget-message.safe {
   background: var(--income-bg);
-  color: var(--mint-dark);
+  color: var(--positive-dark);
 }
 
 .budget-message.warn {
@@ -468,7 +468,7 @@ body::before {
 
 .budget-message.danger {
   background: var(--expense-bg);
-  color: var(--sakura-pink-dark);
+  color: var(--accent-dark);
   animation: pulse 2s infinite;
 }
 
@@ -501,7 +501,7 @@ body::before {
 
 .summary-item .value.income { color: var(--income-color); }
 .summary-item .value.expense { color: var(--expense-color); }
-.summary-item .value.balance { color: var(--lavender-dark); }
+.summary-item .value.balance { color: var(--secondary-dark); }
 
 /* ========== Transaction Card ========== */
 .transaction-card {
@@ -653,7 +653,7 @@ body::before {
 }
 
 .nav-item:hover {
-  color: var(--lavender-dark);
+  color: var(--secondary-dark);
 }
 
 .nav-item:hover .nav-icon {
@@ -661,7 +661,7 @@ body::before {
 }
 
 .nav-item.active {
-  color: var(--sakura-pink-dark);
+  color: var(--accent-dark);
   background: rgba(255, 183, 197, 0.15);
 }
 
@@ -687,7 +687,7 @@ body::before {
   top: -20px;
   width: 12px;
   height: 12px;
-  background: radial-gradient(ellipse at center, var(--sakura-pink) 0%, var(--sakura-pink-light) 70%, transparent 100%);
+  background: radial-gradient(ellipse at center, var(--accent) 0%, var(--accent-light) 70%, transparent 100%);
   border-radius: 50% 0 50% 0;
   opacity: 0.6;
   animation: sakuraFall linear infinite;
@@ -719,7 +719,7 @@ body::before {
 
 .filter-chip {
   padding: 6px 14px;
-  border: 2px solid var(--lavender-light);
+  border: 2px solid var(--secondary-light);
   border-radius: 20px;
   background: var(--bg-glass);
   font-family: var(--font-main);
@@ -731,13 +731,13 @@ body::before {
 }
 
 .filter-chip:hover {
-  border-color: var(--sakura-pink);
+  border-color: var(--accent);
 }
 
 .filter-chip.active {
-  background: var(--sakura-pink);
+  background: var(--accent);
   color: white;
-  border-color: var(--sakura-pink);
+  border-color: var(--accent);
 }
 
 /* 交易卡片上的标签小药丸；尺寸压小，避免撑破卡片行高 */
@@ -752,7 +752,7 @@ body::before {
   font-size: 0.65rem;
   padding: 1px 6px;
   border-radius: 8px;
-  background: var(--lavender-light);
+  background: var(--secondary-light);
   color: var(--text-secondary);
   white-space: nowrap;
 }
@@ -813,7 +813,7 @@ body::before {
 
 .report-tab.active {
   background: white;
-  color: var(--sakura-pink-dark);
+  color: var(--accent-dark);
   box-shadow: var(--shadow-soft);
 }
 
@@ -883,12 +883,12 @@ body::before {
 }
 
 .toast.success {
-  background: var(--mint);
+  background: var(--positive);
   color: white;
 }
 
 .toast.error {
-  background: var(--sakura-pink-dark);
+  background: var(--accent-dark);
   color: white;
 }
 
@@ -992,7 +992,7 @@ body::before {
 .select-field {
   width: 100%;
   padding: 12px 16px;
-  border: 2px solid var(--lavender-light);
+  border: 2px solid var(--secondary-light);
   border-radius: var(--radius-md);
   font-family: var(--font-main);
   font-size: 1rem;
@@ -1006,7 +1006,7 @@ body::before {
 }
 
 .select-field:focus {
-  border-color: var(--sakura-pink);
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(255, 183, 197, 0.2);
 }
 
@@ -1023,7 +1023,7 @@ body::before {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  border: 2px solid var(--lavender-light);
+  border: 2px solid var(--secondary-light);
   background: var(--bg-glass);
   font-size: 1.1rem;
   cursor: pointer;
@@ -1035,9 +1035,9 @@ body::before {
 }
 
 .period-nav button:hover {
-  background: var(--sakura-pink-light);
-  border-color: var(--sakura-pink);
-  color: var(--sakura-pink-dark);
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent-dark);
 }
 
 .period-nav .period-label {
@@ -1088,7 +1088,7 @@ body::before {
 .setting-item input {
   width: 100%;
   padding: 12px 16px;
-  border: 2px solid var(--lavender-light);
+  border: 2px solid var(--secondary-light);
   border-radius: var(--radius-md);
   font-family: var(--font-main);
   font-size: 1rem;
@@ -1099,7 +1099,7 @@ body::before {
 }
 
 .setting-item input:focus {
-  border-color: var(--sakura-pink);
+  border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(255, 183, 197, 0.2);
   outline: none;
 }
@@ -1118,7 +1118,7 @@ body::before {
 
 .btn-secondary {
   padding: 12px 24px;
-  border: 2px solid var(--lavender-light);
+  border: 2px solid var(--secondary-light);
   background: transparent;
   color: var(--text-secondary);
   border-radius: var(--radius-md);
@@ -1129,8 +1129,8 @@ body::before {
 }
 
 .btn-secondary:hover {
-  background: var(--lavender-light);
-  color: var(--lavender-dark);
+  background: var(--secondary-light);
+  color: var(--secondary-dark);
   transform: scale(1.05);
 }
 
@@ -1157,7 +1157,7 @@ body::before {
 
 .pagination button {
   padding: 8px 12px;
-  border: 2px solid var(--lavender-light);
+  border: 2px solid var(--secondary-light);
   background: transparent;
   border-radius: var(--radius-md);
   font-family: var(--font-main);
@@ -1168,7 +1168,7 @@ body::before {
 }
 
 .pagination button:hover:not(:disabled) {
-  background: var(--lavender-light);
+  background: var(--secondary-light);
   transform: scale(1.05);
 }
 
@@ -1220,7 +1220,7 @@ body::before {
   display: flex;
   gap: 8px;
   margin-bottom: 16px;
-  border-bottom: 2px solid var(--lavender-light);
+  border-bottom: 2px solid var(--secondary-light);
 }
 
 .category-tab {
@@ -1239,7 +1239,7 @@ body::before {
 
 .category-tab.active {
   color: var(--text-primary);
-  border-bottom-color: var(--sakura-pink);
+  border-bottom-color: var(--accent);
 }
 
 /* ========== Category Management ========== */
@@ -1296,7 +1296,7 @@ body::before {
   padding: 12px;
   background: var(--bg-glass);
   border-radius: var(--radius-md);
-  border: 1px dashed var(--lavender-light);
+  border: 1px dashed var(--secondary-light);
   width: 100%;
   box-sizing: border-box;
   overflow: hidden;
@@ -1305,7 +1305,7 @@ body::before {
 .category-add-form input {
   min-width: 0;
   padding: 8px 12px;
-  border: 1px solid var(--lavender-light);
+  border: 1px solid var(--secondary-light);
   border-radius: var(--radius-sm);
   font-family: var(--font-main);
   font-size: 0.9rem;
@@ -1327,7 +1327,7 @@ body::before {
 
 .category-add-form input:focus {
   outline: none;
-  border-color: var(--sakura-pink);
+  border-color: var(--accent);
 }
 
 .category-add-form button {
@@ -1371,15 +1371,15 @@ body::before {
 /* 系统深色 + 用户未强制浅色 */
 @media (prefers-color-scheme: dark) {
   html:not([data-theme="light"]) {
-    --sakura-pink: #E8869B;
-    --sakura-pink-light: #C8A2C8;
-    --sakura-pink-dark: #B07398;
-    --lavender: #8A6B8A;
-    --lavender-light: #6A4B6A;
-    --lavender-dark: #5A3B5A;
-    --mint: #6BC4A8;
-    --mint-light: #5BA498;
-    --mint-dark: #4BA488;
+    --accent: #E8869B;
+    --accent-light: #C8A2C8;
+    --accent-dark: #B07398;
+    --secondary: #8A6B8A;
+    --secondary-light: #6A4B6A;
+    --secondary-dark: #5A3B5A;
+    --positive: #6BC4A8;
+    --positive-light: #5BA498;
+    --positive-dark: #4BA488;
 
     --bg-primary: #1A1A1E;
     --bg-secondary: #232329;
@@ -1403,22 +1403,22 @@ body::before {
   html:not([data-theme="light"]) body::before { opacity: 0.15; }
   html:not([data-theme="light"]) .input-field { background: rgba(60, 60, 70, 0.7); color: var(--text-primary); }
   html:not([data-theme="light"]) .input-field::placeholder { color: var(--text-muted); }
-  html:not([data-theme="light"]) .input-field:focus { border-color: var(--sakura-pink); box-shadow: 0 0 0 3px rgba(232, 134, 155, 0.2); }
+  html:not([data-theme="light"]) .input-field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(232, 134, 155, 0.2); }
   html:not([data-theme="light"]) .modal-content { background: var(--bg-secondary); color: var(--text-primary); }
   html:not([data-theme="light"]) .form-group label { color: var(--text-secondary); }
 }
 
 /* 手动深色（覆盖系统浅色） */
 html[data-theme="dark"] {
-  --sakura-pink: #E8869B;
-  --sakura-pink-light: #C8A2C8;
-  --sakura-pink-dark: #B07398;
-  --lavender: #8A6B8A;
-  --lavender-light: #6A4B6A;
-  --lavender-dark: #5A3B5A;
-  --mint: #6BC4A8;
-  --mint-light: #5BA498;
-  --mint-dark: #4BA488;
+  --accent: #E8869B;
+  --accent-light: #C8A2C8;
+  --accent-dark: #B07398;
+  --secondary: #8A6B8A;
+  --secondary-light: #6A4B6A;
+  --secondary-dark: #5A3B5A;
+  --positive: #6BC4A8;
+  --positive-light: #5BA498;
+  --positive-dark: #4BA488;
 
   --bg-primary: #1A1A1E;
   --bg-secondary: #232329;
@@ -1442,7 +1442,7 @@ html[data-theme="dark"] {
 html[data-theme="dark"] body::before { opacity: 0.15; }
 html[data-theme="dark"] .input-field { background: rgba(60, 60, 70, 0.7); color: var(--text-primary); }
 html[data-theme="dark"] .input-field::placeholder { color: var(--text-muted); }
-html[data-theme="dark"] .input-field:focus { border-color: var(--sakura-pink); box-shadow: 0 0 0 3px rgba(232, 134, 155, 0.2); }
+html[data-theme="dark"] .input-field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(232, 134, 155, 0.2); }
 html[data-theme="dark"] .modal-content { background: var(--bg-secondary); color: var(--text-primary); }
 html[data-theme="dark"] .form-group label { color: var(--text-secondary); }
 
