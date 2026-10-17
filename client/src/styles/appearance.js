@@ -2,7 +2,7 @@
 //   data-theme：永远是解析后的 light / dark（「跟随系统」在这里按系统设置换算）
 //   data-style：anime / space / classic
 // index.html 里有一段内联脚本在 CSS 生效前做同样的事，防止首屏闪烁；两边逻辑要保持一致。
-import { resolveStyle } from './registry';
+import { DEFAULT_STYLE, resolveStyle } from './registry';
 
 const THEME_KEY = 'theme';     // 存用户选的档位：system / light / dark
 const STYLE_KEY = 'uiStyle';   // 存上次登录账号的风格，登录页和刷新时沿用
@@ -31,9 +31,30 @@ export function getThemePref() {
   return THEME_PREFS.includes(pref) ? pref : 'system';
 }
 
+// 当前生效的外观，供 React 组件订阅（useSyncExternalStore）。内容变化时换一个新对象
+let snapshot = { theme: 'light', style: DEFAULT_STYLE };
+const listeners = new Set();
+
+function publish(partial) {
+  const next = { ...snapshot, ...partial };
+  if (next.theme === snapshot.theme && next.style === snapshot.style) return;
+  snapshot = next;
+  listeners.forEach((listener) => listener());
+}
+
+export function subscribeAppearance(listener) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function getAppearance() {
+  return snapshot;
+}
+
 function applyTheme() {
-  if (!hasDocument) return;
-  document.documentElement.setAttribute('data-theme', resolveTheme(getThemePref(), darkQuery?.matches));
+  const theme = resolveTheme(getThemePref(), darkQuery?.matches);
+  if (hasDocument) document.documentElement.setAttribute('data-theme', theme);
+  publish({ theme });
 }
 
 export function setThemePref(pref) {
@@ -50,6 +71,7 @@ export function applyStyle(id, { persist = true } = {}) {
   const styleId = resolveStyle(id);
   if (persist) writeStorage(STYLE_KEY, styleId);
   if (hasDocument) document.documentElement.setAttribute('data-style', styleId);
+  publish({ style: styleId });
   return styleId;
 }
 

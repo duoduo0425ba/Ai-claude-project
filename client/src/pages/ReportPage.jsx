@@ -18,6 +18,7 @@ import { exportToExcel } from '../utils/excel';
 import { formatLocalDate } from '../utils/date';
 import ToastContainer from '../components/ToastContainer';
 import { useToast } from '../hooks/useToast';
+import { useChartTheme } from '../hooks/useChartTheme';
 
 ChartJS.register(
   CategoryScale,
@@ -32,91 +33,9 @@ ChartJS.register(
   Filler
 );
 
-const CHART_COLORS = {
-  income: 'rgba(107, 196, 168, 0.8)',
-  incomeBg: 'rgba(107, 196, 168, 0.2)',
-  expense: 'rgba(232, 134, 155, 0.8)',
-  expenseBg: 'rgba(232, 134, 155, 0.2)',
-  pieColors: [
-    '#FFB7C5', '#C8A2C8', '#98D8C8', '#FFD93D',
-    '#A8E6CF', '#DDA0DD', '#87CEEB', '#F0E68C',
-    '#FFA07A', '#E0BBE4',
-  ],
-};
-
-const commonOptions = {
-  responsive: true,
-  maintainAspectRatio: true,
-  plugins: {
-    legend: {
-      labels: {
-        font: { family: "'ZCOOL KuaiLe', sans-serif", size: 12 },
-        color: '#7A6B7A',
-      },
-    },
-    tooltip: {
-      backgroundColor: 'rgba(255, 255, 255, 0.9)',
-      titleColor: '#4A3B4A',
-      bodyColor: '#4A3B4A',
-      borderColor: '#E0CDE0',
-      borderWidth: 1,
-      titleFont: { family: "'ZCOOL KuaiLe', sans-serif" },
-      bodyFont: { family: "'ZCOOL KuaiLe', sans-serif" },
-      callbacks: {
-        label: (ctx) => `¥${ctx.parsed.y?.toFixed(2) ?? ctx.parsed?.toFixed(2) ?? ctx.raw}`,
-      },
-    },
-  },
-  scales: {
-    x: {
-      ticks: {
-        font: { family: "'ZCOOL KuaiLe', sans-serif", size: 11 },
-        color: '#A89BA8',
-      },
-      grid: { display: false },
-    },
-    y: {
-      ticks: {
-        font: { family: "'ZCOOL KuaiLe', sans-serif", size: 11 },
-        color: '#A89BA8',
-        callback: (v) => `¥${v}`,
-      },
-      grid: { color: 'rgba(200, 162, 200, 0.1)' },
-    },
-  },
-};
-
-const pieOptions = {
-  responsive: true,
-  maintainAspectRatio: true,
-  plugins: {
-    legend: {
-      position: 'bottom',
-      labels: {
-        font: { family: "'ZCOOL KuaiLe', sans-serif", size: 12 },
-        color: '#7A6B7A',
-        padding: 12,
-      },
-    },
-    tooltip: {
-      backgroundColor: 'rgba(255, 255, 255, 0.9)',
-      titleColor: '#4A3B4A',
-      bodyColor: '#4A3B4A',
-      borderColor: '#E0CDE0',
-      borderWidth: 1,
-      bodyFont: { family: "'ZCOOL KuaiLe', sans-serif" },
-      callbacks: {
-        label: (ctx) => {
-          const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-          const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
-          return `${ctx.label}: ¥${ctx.raw.toFixed(2)} (${pct}%)`;
-        },
-      },
-    },
-  },
-};
-
 export default function ReportPage() {
+  // 图表配色和配置来自样式令牌，切换深浅色时自动更新
+  const { colors, common: commonOptions, pie: pieOptions } = useChartTheme();
   const [today] = useState(() => new Date());
   const [tab, setTab] = useState('weekly');
   const [year, setYear] = useState(today.getFullYear());
@@ -250,14 +169,14 @@ export default function ReportPage() {
         {
           label: '收入',
           data: weeklyData.map((d) => d.income),
-          backgroundColor: CHART_COLORS.income,
+          backgroundColor: colors.income,
           borderRadius: 8,
           borderSkipped: false,
         },
         {
           label: '支出',
           data: weeklyData.map((d) => d.expense),
-          backgroundColor: CHART_COLORS.expense,
+          backgroundColor: colors.expense,
           borderRadius: 8,
           borderSkipped: false,
         },
@@ -324,8 +243,8 @@ export default function ReportPage() {
         {
           label: '收入',
           data: monthlyData.daily.map((d) => d.income),
-          borderColor: CHART_COLORS.income,
-          backgroundColor: CHART_COLORS.incomeBg,
+          borderColor: colors.income,
+          backgroundColor: colors.incomeBg,
           fill: true,
           tension: 0.4,
           pointRadius: 2,
@@ -334,8 +253,8 @@ export default function ReportPage() {
         {
           label: '支出',
           data: monthlyData.daily.map((d) => d.expense),
-          borderColor: CHART_COLORS.expense,
-          backgroundColor: CHART_COLORS.expenseBg,
+          borderColor: colors.expense,
+          backgroundColor: colors.expenseBg,
           fill: true,
           tension: 0.4,
           pointRadius: 2,
@@ -349,9 +268,9 @@ export default function ReportPage() {
       datasets: [
         {
           data: monthlyData.categories.map((c) => c.total),
-          backgroundColor: CHART_COLORS.pieColors.slice(0, monthlyData.categories.length),
+          backgroundColor: colors.pie.slice(0, monthlyData.categories.length),
           borderWidth: 2,
-          borderColor: '#fff',
+          borderColor: colors.pieBorder,
         },
       ],
     };
@@ -361,9 +280,9 @@ export default function ReportPage() {
       datasets: [
         {
           data: monthlyData.incomeCategories.map((c) => c.total),
-          backgroundColor: CHART_COLORS.pieColors.slice(0, monthlyData.incomeCategories.length),
+          backgroundColor: colors.pie.slice(0, monthlyData.incomeCategories.length),
           borderWidth: 2,
-          borderColor: '#fff',
+          borderColor: colors.pieBorder,
         },
       ],
     };
@@ -451,14 +370,14 @@ export default function ReportPage() {
         {
           label: '收入',
           data: months.map((d) => d.income),
-          backgroundColor: CHART_COLORS.income,
+          backgroundColor: colors.income,
           borderRadius: 6,
           borderSkipped: false,
         },
         {
           label: '支出',
           data: months.map((d) => d.expense),
-          backgroundColor: CHART_COLORS.expense,
+          backgroundColor: colors.expense,
           borderRadius: 6,
           borderSkipped: false,
         },

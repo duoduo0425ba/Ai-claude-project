@@ -108,13 +108,14 @@ cd client && npm run lint
 - **排序必须走服务端。** 列表是分页的，前端只持有当前 30 条；对 `transactions` 数组本地排序得到的是「这一页里最大的」而非「全部记录里最大的」——看着能用，结果是错的。ListPage 的金额排序把 `sort`/`order` 传给后端，三态循环：`null`（按日期）→ `'desc'` → `'asc'` → `null`
 - 按金额排序时**关闭日期分组**，改用 `.sorted-list` 平铺、每条上方标注日期。否则金额顺序会打乱日期，分组头出现「08-03 / 08-01 / 08-03」这类反复跳动
 - 排序或筛选条件变更时通过 `prevFilters` ref 重置到第 1 页（新条件下停留在第 N 页没有意义）
-- 外观（明暗主题 + 界面风格）统一由 `styles/appearance.js` 管理，体现为 `<html>` 上两个属性：`data-theme` **永远是解析后的 `light` / `dark`**（选「跟随系统」时由 JS 按 `matchMedia` 换算，并监听系统切换），`data-style` 是 `anime` / `space` / `classic`。localStorage 里 `theme` 存档位（system / light / dark），`uiStyle` 存上次登录账号的风格。`main.jsx` 在渲染前调用 `initAppearance()`；`index.html` 头部另有一段内联脚本在 CSS 生效前做同样的事防止首屏闪烁——**改外观逻辑时两处要同步**。`index.css` 目前仍保留与 `html[data-theme="dark"]` 重复的 `@media (prefers-color-scheme: dark)` 深色块
+- 外观（明暗主题 + 界面风格）统一由 `styles/appearance.js` 管理，体现为 `<html>` 上两个属性：`data-theme` **永远是解析后的 `light` / `dark`**（选「跟随系统」时由 JS 按 `matchMedia` 换算，并监听系统切换），`data-style` 是 `anime` / `space` / `classic`。localStorage 里 `theme` 存档位（system / light / dark），`uiStyle` 存上次登录账号的风格。`main.jsx` 在渲染前调用 `initAppearance()`；`index.html` 头部另有一段内联脚本在 CSS 生效前做同样的事防止首屏闪烁——**改外观逻辑时两处要同步**。组件订阅外观变化用 `subscribeAppearance` / `getAppearance`（配合 `useSyncExternalStore`）
+- 报表图表画在 canvas 上用不了 CSS 变量：颜色和字体来自 `--chart-*` 令牌，由 `styles/chartTheme.js` 读出后交给 Chart.js，`hooks/useChartTheme` 在切换深浅色或风格时重算。图表令牌只能写 hex / rgb(a)（Chart.js 不认 `color-mix` 等写法）
 - 周期账单在首页加载时自动调用 `generateRecurring()`——该接口幂等（跳过已生成的条目）
 - 标签选择用 `TagPicker` 组件（多选 chip + 自由输入）。**添加表单和编辑表单是两个不 DRY 的近似副本**（`TransactionForm` / `EditTransactionForm`），标签相关改动必须同步两处；**编辑表单的 payload 必须带 `tags`**——PUT 是全量替换，漏传会在每次编辑时清空该笔交易的标签
 - ListPage 的标签筛选 state 是**单字符串**（`''` = 不筛选，存 localStorage `listPageTag`）——`prevFilters` 用恒等比较，换成数组会每次渲染都误判变更、把页码重置回第 1 页
 - `TransactionCard` 渲染标签必须用可选链（`tags?.length`）：stats 接口返回的记录不带 `tags`，而该组件是共用的
 
-**样式：** `index.css` 中的 CSS 自定义属性，无 CSS-in-JS，所有主题通过 `var(--token-name)` 实现。
+**样式：** `index.css` 中的 CSS 自定义属性，无 CSS-in-JS。`:root` 是**令牌全集**（同时是二次元浅色的值），按用途命名（`--accent` / `--secondary` / `--positive`、`--bg-*`、`--on-accent`、`--glow-*`、`--blur-*`、`--radius-*`、`--font-display` / `--font-numeric`、`--ambient-*`、`--chart-*` 等）；深色写在 `html[data-style="anime"][data-theme="dark"]`，只覆盖令牌、不写组件样式。**组件规则里不准出现颜色字面量**（hex、rgba、white），模糊半径和圆角也走令牌——换风格只需重新定义令牌。`styles/tokens.test.js` 会检查：深色块不能新增 `:root` 没有的令牌、CSS 和 JSX 里引用的每个 `var(--x)` 都有定义、组件规则里没有颜色字面量、图表令牌格式正确。
 
 **数字输入框：** 使用 `type="text" inputMode="decimal"`（而非 `type="number"`），避免浏览器拒绝 `"01"` 等中间状态。
 
@@ -136,8 +137,9 @@ client/src/
 ├── api/index.js       # 所有 API 调用、Token 注入、401 处理
 ├── pages/             # 4 个路由页面 + LoginPage、RegisterPage
 ├── components/        # BudgetAlert、CategoryPicker、TagPicker、ErrorBoundary 等
-├── hooks/             # useToast、useLocalStorage
-├── styles/            # registry.js（风格清单）、appearance.js（明暗 + 风格的唯一入口）
+├── hooks/             # useToast、useLocalStorage、useChartTheme
+├── styles/            # registry.js（风格清单）、appearance.js（明暗 + 风格的唯一入口）、chartTheme.js（图表配色）
+├── test-utils/        # 只给测试用的工具（cssTokens.js 解析 index.css 的令牌块），应用代码不要引用
 ├── utils/             # session.js（登录状态）、date.js、Excel 导入导出
 └── index.css          # 设计 token + 深色模式
 ```

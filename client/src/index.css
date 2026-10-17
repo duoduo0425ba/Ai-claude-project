@@ -101,6 +101,29 @@
   --gradient-danger: linear-gradient(135deg, #FF6B6B, #EE5A24);
   --ambient-bg: linear-gradient(135deg, var(--accent-light) 0%, var(--secondary-light) 50%, var(--positive-light) 100%);
   --ambient-opacity: 0.3;
+
+  /* 报表图表（styles/chartTheme.js 读取后交给 Chart.js）。Chart.js 只认 hex / rgb(a)，不要用 color-mix 等写法 */
+  --chart-income: rgba(107, 196, 168, 0.8);
+  --chart-income-bg: rgba(107, 196, 168, 0.2);
+  --chart-expense: rgba(232, 134, 155, 0.8);
+  --chart-expense-bg: rgba(232, 134, 155, 0.2);
+  --chart-text: #7A6B7A;               /* 图例 */
+  --chart-tick: #A89BA8;               /* 坐标轴刻度 */
+  --chart-grid: rgba(200, 162, 200, 0.1);
+  --chart-tooltip-bg: rgba(255, 255, 255, 0.9);
+  --chart-tooltip-text: #4A3B4A;
+  --chart-tooltip-border: #E0CDE0;
+  --chart-pie-border: #FFFFFF;
+  --chart-1: #FFB7C5;
+  --chart-2: #C8A2C8;
+  --chart-3: #98D8C8;
+  --chart-4: #FFD93D;
+  --chart-5: #A8E6CF;
+  --chart-6: #DDA0DD;
+  --chart-7: #87CEEB;
+  --chart-8: #F0E68C;
+  --chart-9: #FFA07A;
+  --chart-10: #E0BBE4;
 }
 
 /* ========== Reset & Base ========== */
@@ -1450,6 +1473,14 @@ html[data-style="anime"][data-theme="dark"] {
   --shadow-float: 0 12px 40px rgba(0, 0, 0, 0.5);
 
   --ambient-opacity: 0.15;
+
+  --chart-text: #B8B8C8;
+  --chart-tick: #888898;
+  --chart-grid: rgba(255, 255, 255, 0.08);
+  --chart-tooltip-bg: rgba(35, 35, 41, 0.95);
+  --chart-tooltip-text: #E8E8E8;
+  --chart-tooltip-border: #6A4B6A;
+  --chart-pie-border: #232329;
 }
 
 /* ========== Responsive ========== */
@@ -1464,5 +1495,16 @@ html[data-style="anime"][data-theme="dark"] {
 
   .daily-summary > :last-child {
     grid-column: 1 / -1;
+  }
+}
+
+/* ========== 减弱动态效果 ========== */
+/* 系统开启「减弱动态效果」时，动画和过渡一闪而过。
+   用极短时长而不是 animation: none：带 forwards 的入场动画仍会停在终点，否则元素会停在透明的起始帧 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

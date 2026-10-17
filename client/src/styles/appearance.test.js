@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { resolveTheme, getThemePref, setThemePref, getStyleId, applyStyle } from './appearance';
+import {
+  resolveTheme, getThemePref, setThemePref, getStyleId, applyStyle, subscribeAppearance, getAppearance,
+} from './appearance';
 
 // 测试环境是 node，没有浏览器存储，用一个 Map 模拟
 function fakeStorage() {
@@ -59,6 +61,31 @@ describe('界面风格', () => {
   it('未知风格按二次元处理', () => {
     expect(applyStyle('hello')).toBe('anime');
     expect(getStyleId()).toBe('anime');
+  });
+
+  it('外观变化时通知订阅者；值没变不通知，取消订阅后不再通知', () => {
+    applyStyle('space');
+    setThemePref('light');
+    const listener = vi.fn();
+    const unsubscribe = subscribeAppearance(listener);
+    const before = getAppearance();
+
+    applyStyle('classic');
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(getAppearance()).toEqual({ theme: 'light', style: 'classic' });
+    expect(getAppearance()).not.toBe(before); // 换了新对象，React 才会重新渲染
+
+    applyStyle('classic');
+    setThemePref('light');
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    setThemePref('dark');
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(getAppearance().theme).toBe('dark');
+
+    unsubscribe();
+    applyStyle('anime');
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 
   it('浏览器禁用存储时不报错，按默认值处理', () => {
